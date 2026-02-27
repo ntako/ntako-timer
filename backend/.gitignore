@@ -1,0 +1,5 @@
+# Local credentials — never commit this file
+config/local.php
+
+# Rate-limit state files
+cache/rl_*

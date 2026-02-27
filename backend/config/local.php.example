@@ -1,0 +1,11 @@
+<?php
+
+// Copy this file to config/local.php on the server and fill in real values.
+// config/local.php is listed in .gitignore — never commit real credentials.
+
+putenv('DB_HOST=localhost');
+putenv('DB_NAME=your_database_name');
+putenv('DB_USER=your_database_user');
+putenv('DB_PASS=your_database_password');
+putenv('JWT_SECRET=change_this_to_a_long_random_string');
+putenv('ADMIN_PASS=change_this_admin_password');

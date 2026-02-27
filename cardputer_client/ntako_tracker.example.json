@@ -1,0 +1,12 @@
+{
+  "api_url": "https://www.example.com/api",
+  "auth": {
+    "token": "",
+    "email": ""
+  },
+  "wifi": [
+    {"ssid": "OfficeSSID",   "pass": "OfficePassword123"},
+    {"ssid": "HomeSSID",    "pass": "HomePassword456"},
+    {"ssid": "OtherSSID", "pass": "OtherPassword789"}
+  ]
+}

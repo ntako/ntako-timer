@@ -1,0 +1,61 @@
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Keep examples in version control
+!.env.example
+
+# Belt-and-suspenders: never commit credentials regardless of location
+backend/config/local.php
+backend/cache/rl_*
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# docker-compose.override.yml is often used for local overrides
+docker-compose.override.yml
+
+# ── Flutter ───────────────────────────────────────────────────────────────────
+# flutter_app/ has its own .gitignore; these cover repo-level catches
+flutter_app/.dart_tool/
+flutter_app/build/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.pub-cache/
+
+# ── Arduino / ESP32 (cardputer_client) ───────────────────────────────────────
+# Compiled firmware and object files produced by Arduino IDE / arduino-cli
+cardputer_client/NtakoTimer/build/
+cardputer_client/**/*.elf
+cardputer_client/**/*.bin
+cardputer_client/**/*.hex
+cardputer_client/**/*.map
+
+# ── OS & editor ───────────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# JetBrains / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code (uncomment if you don't want to share launch configs)
+# .vscode/
+
+# Vim / Emacs swap files
+*.swp
+*.swo
+.#*
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log

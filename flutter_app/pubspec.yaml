@@ -1,0 +1,47 @@
+name: ntako_timer
+description: "Pomodoro timer with task management and optional cloud sync."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.0
+  riverpod_annotation: ^2.3.0
+
+  # Local database (SQLite on mobile, WASM IndexedDB on web via drift_flutter)
+  drift: ^2.18.0
+  drift_flutter: ^0.2.0
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.0
+
+  # Networking
+  dio: ^5.4.0
+
+  # Secure storage for JWT token
+  flutter_secure_storage: ^9.0.0
+
+  # Timer notifications (no-op on web)
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.0
+
+  # Utilities
+  uuid: ^4.3.0
+  go_router: ^13.0.0
+  intl: ^0.20.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.0
+  riverpod_generator: ^2.3.0
+
+flutter:
+  uses-material-design: true

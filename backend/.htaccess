@@ -1,0 +1,25 @@
+Options -Indexes
+RewriteEngine On
+
+# Pass Authorization header through to PHP (stripped by Apache on shared hosting)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# CORS headers
+Header always set Access-Control-Allow-Origin "*"
+Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+
+# Handle preflight OPTIONS requests
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^ - [R=204,L]
+
+# Route any non-existing path to index.php — works at root or in any subdirectory.
+# index.php extracts the route by stripping everything up to /api/ in the URI.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Security
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "DENY"

@@ -1,0 +1,307 @@
+#include <Arduino.h>
+#include "api_client.h"
+#include "config.h"
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+
+static char _baseUrl[128] = "";
+
+void Api::init(const char* baseUrl) {
+    strlcpy(_baseUrl, baseUrl, sizeof(_baseUrl));
+}
+
+// Single shared secure client — avoids repeated heap allocation.
+static WiFiClientSecure _secClient;
+
+static void httpBegin(HTTPClient& http, const String& url) {
+    if (url.startsWith("https://")) {
+        _secClient.setInsecure(); // personal/dev use — skip cert validation
+        http.begin(_secClient, url);
+    } else {
+        http.begin(url);
+    }
+}
+
+static bool doPost(const char* path, const String& body, const char* token,
+                   JsonDocument& out, char* outErr, size_t errSize) {
+    HTTPClient http;
+    httpBegin(http, String(_baseUrl) + path);
+    http.addHeader("Content-Type", "application/json");
+    if (token && strlen(token) > 0)
+        http.addHeader("Authorization", String("Bearer ") + token);
+    http.setTimeout(10000);
+
+    int code = http.POST((uint8_t*)body.c_str(), body.length());
+    if (code < 0) {
+        snprintf(outErr, errSize, "HTTP err %d", code);
+        http.end();
+        return false;
+    }
+
+    String respBody = http.getString();
+    http.end();
+
+    DeserializationError err = deserializeJson(out, respBody);
+    if (err) { snprintf(outErr, errSize, "HTTP%d %.16s", code, respBody.c_str()); return false; }
+    if (code >= 400) {
+        snprintf(outErr, errSize, "%s (%d)",
+                 out["error"] | "Server error", code);
+        return false;
+    }
+    return true;
+}
+
+static bool doGet(const char* path, const char* token,
+                  JsonDocument& out, char* outErr, size_t errSize) {
+    HTTPClient http;
+    httpBegin(http, String(_baseUrl) + path);
+    if (token && strlen(token) > 0)
+        http.addHeader("Authorization", String("Bearer ") + token);
+    http.setTimeout(10000);
+
+    int code = http.GET();
+    if (code < 0) {
+        snprintf(outErr, errSize, "HTTP err %d", code);
+        http.end();
+        return false;
+    }
+
+    String respBody = http.getString();
+    http.end();
+
+    DeserializationError err = deserializeJson(out, respBody);
+    if (err) { snprintf(outErr, errSize, "JSON err: %.20s", respBody.c_str()); return false; }
+    if (code >= 400) {
+        snprintf(outErr, errSize, "%s (%d)",
+                 out["error"] | "Server error", code);
+        return false;
+    }
+    return true;
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+bool Api::login(const char* email, const char* password,
+                char* outToken, size_t tokenSize,
+                char* outErr,   size_t errSize) {
+    JsonDocument body;
+    body["email"]    = email;
+    body["password"] = password;
+    String bodyStr;
+    serializeJson(body, bodyStr);
+
+    JsonDocument resp;
+    if (!doPost("/auth/login", bodyStr, nullptr, resp, outErr, errSize))
+        return false;
+
+    const char* tok = resp["token"];
+    if (!tok) { snprintf(outErr, errSize, "No token"); return false; }
+    strlcpy(outToken, tok, tokenSize);
+    return true;
+}
+
+bool Api::registerUser(const char* email, const char* password,
+                       char* outToken, size_t tokenSize,
+                       char* outErr,   size_t errSize) {
+    JsonDocument body;
+    body["email"]    = email;
+    body["password"] = password;
+    String bodyStr;
+    serializeJson(body, bodyStr);
+
+    JsonDocument resp;
+    if (!doPost("/auth/register", bodyStr, nullptr, resp, outErr, errSize))
+        return false;
+
+    const char* tok = resp["token"];
+    if (!tok) { snprintf(outErr, errSize, "No token"); return false; }
+    strlcpy(outToken, tok, tokenSize);
+    return true;
+}
+
+int Api::pull(const char* token, int64_t since,
+              Category* cats, int maxCats, int& catCount,
+              Task* tasks, int maxTasks, int64_t& serverTime,
+              SessionEntry* sessions, int maxSessions, int* sessionCount) {
+    char path[48];
+    snprintf(path, sizeof(path), "/sync/pull?since=%lld", since);
+
+    char err[64];
+    JsonDocument resp;
+    if (!doGet(path, token, resp, err, sizeof(err))) return -1;
+
+    serverTime = resp["server_time"] | (int64_t)0;
+
+    // ── Categories ──
+    catCount = 0;
+    if (cats && maxCats > 0) {
+        JsonArray carr = resp["categories"].as<JsonArray>();
+        if (!carr.isNull()) {
+            for (JsonObject c : carr) {
+                if (catCount >= maxCats) break;
+                int64_t deleted_at = c["deleted_at"] | (int64_t)0;
+                if (deleted_at != 0) continue; // skip soft-deleted
+                Category& cat = cats[catCount];
+                strlcpy(cat.id,    c["client_id"] | "", sizeof(cat.id));
+                cat.server_id = c["id"] | 0;
+                strlcpy(cat.name,  c["name"]  | "?",       sizeof(cat.name));
+                strlcpy(cat.color, c["color"] | "#6366f1", sizeof(cat.color));
+                cat.needs_push = false;
+                catCount++;
+            }
+        }
+    }
+
+    // ── Tasks ──
+    JsonArray arr = resp["tasks"].as<JsonArray>();
+    int count = 0;
+    if (!arr.isNull()) {
+        for (JsonObject t : arr) {
+            if (count >= maxTasks) break;
+            Task& tk = tasks[count];
+            strlcpy(tk.id,          t["client_id"]         | "", sizeof(tk.id));
+            strlcpy(tk.category_id, t["category_client_id"] | "", sizeof(tk.category_id));
+            tk.server_id      = t["id"] | 0;
+            strlcpy(tk.title, t["title"] | "Untitled", sizeof(tk.title));
+            const char* tp    = t["type"] | "pomodoro";
+            tk.is_tracker     = (strcmp(tp, "tracker") == 0);
+            tk.pomodoro_goal  = t["pomodoro_goal"]  | 4;
+            tk.pomodoros_done = t["pomodoros_done"] | 0;
+            tk.is_completed   = (int)(t["is_completed"] | 0) != 0;
+            tk.updated_at     = t["updated_at"] | (int64_t)0;
+            tk.created_at     = t["created_at"] | (int64_t)0;
+            tk.needs_push     = false;
+
+            int64_t deleted_at = t["deleted_at"] | (int64_t)0;
+            if (!tk.is_completed && deleted_at == 0 && strlen(tk.id) > 0)
+                count++;
+        }
+    }
+
+    // ── Sessions (optional) ──
+    if (sessions && maxSessions > 0 && sessionCount) {
+        *sessionCount = 0;
+        JsonArray sarr = resp["sessions"].as<JsonArray>();
+        if (!sarr.isNull()) {
+            for (JsonObject s : sarr) {
+                if (*sessionCount >= maxSessions) break;
+                SessionEntry& se = sessions[*sessionCount];
+                strlcpy(se.clientId, s["client_id"]      | "", sizeof(se.clientId));
+                strlcpy(se.taskId,   s["task_client_id"] | "", sizeof(se.taskId));
+                // taskName resolved by caller from taskId
+                se.taskName[0]  = '\0';
+                se.durationSec  = s["duration_seconds"] | 0;
+                const char* stp = s["type"] | "work";
+                se.isTracker    = (strcmp(stp, "tracking") == 0);
+                if      (strcmp(stp, "short_break") == 0) se.type = PHASE_SHORT_BREAK;
+                else if (strcmp(stp, "long_break")  == 0) se.type = PHASE_LONG_BREAK;
+                else                                      se.type = PHASE_WORK;
+                (*sessionCount)++;
+            }
+        }
+    }
+
+    return count;
+}
+
+bool Api::pushCategory(const char* token, Category& cat, char* outErr, size_t errSize) {
+    int64_t now = (int64_t)millis(); // approximate; server will use its clock
+    JsonDocument body;
+    body["tasks"].to<JsonArray>();
+    body["sessions"].to<JsonArray>();
+    JsonArray cats = body["categories"].to<JsonArray>();
+    JsonObject c   = cats.add<JsonObject>();
+    c["client_id"]  = cat.id;
+    c["name"]       = cat.name;
+    c["color"]      = cat.color;
+    c["created_at"] = now;
+    c["updated_at"] = now;
+
+    String bodyStr;
+    serializeJson(body, bodyStr);
+
+    char err[64];
+    JsonDocument resp;
+    if (!doPost("/sync/push", bodyStr, token, resp, err, sizeof(err))) {
+        if (outErr && errSize > 0) strlcpy(outErr, err, errSize);
+        return false;
+    }
+
+    JsonArray synced = resp["synced_categories"].as<JsonArray>();
+    if (!synced.isNull()) {
+        for (JsonObject sc : synced) {
+            if (strcmp(sc["client_id"] | "", cat.id) == 0) {
+                cat.server_id  = sc["server_id"] | 0;
+                cat.needs_push = false;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+bool Api::pushTask(const char* token, Task& task, char* outErr, size_t errSize) {
+    JsonDocument body;
+    body["categories"].to<JsonArray>();
+    JsonArray tasks = body["tasks"].to<JsonArray>();
+    JsonObject t    = tasks.add<JsonObject>();
+    t["client_id"]            = task.id;
+    t["category_client_id"]   = strlen(task.category_id) > 0 ? task.category_id : nullptr;
+    t["title"]                = task.title;
+    t["type"]                 = task.is_tracker ? "tracker" : "pomodoro";
+    t["pomodoro_goal"]        = task.pomodoro_goal;
+    t["pomodoros_done"]       = task.pomodoros_done;
+    t["is_completed"]         = task.is_completed ? 1 : 0;
+    t["created_at"]           = task.created_at;
+    t["updated_at"]           = task.updated_at;
+    body["sessions"].to<JsonArray>();
+
+    String bodyStr;
+    serializeJson(body, bodyStr);
+
+    char err[64];
+    JsonDocument resp;
+    if (!doPost("/sync/push", bodyStr, token, resp, err, sizeof(err))) {
+        if (outErr && errSize > 0) strlcpy(outErr, err, errSize);
+        return false;
+    }
+
+    JsonArray synced = resp["synced_tasks"].as<JsonArray>();
+    if (!synced.isNull()) {
+        for (JsonObject st : synced) {
+            if (strcmp(st["client_id"] | "", task.id) == 0) {
+                task.server_id  = st["server_id"] | 0;
+                task.needs_push = false;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+bool Api::pushSession(const char* token,
+                      const char* sessionId, const char* taskClientId,
+                      const char* type,
+                      int64_t startedAt, int64_t endedAt, int durationSec) {
+    JsonDocument body;
+    body["categories"].to<JsonArray>();
+    body["tasks"].to<JsonArray>();
+    JsonArray sessions = body["sessions"].to<JsonArray>();
+    JsonObject s = sessions.add<JsonObject>();
+    s["client_id"]        = sessionId;
+    s["task_client_id"]   = taskClientId;
+    s["type"]             = type;
+    s["started_at"]       = startedAt;
+    s["ended_at"]         = endedAt;
+    s["duration_seconds"] = durationSec;
+    s["is_completed"]     = 1;
+    s["created_at"]       = startedAt;
+
+    String bodyStr;
+    serializeJson(body, bodyStr);
+
+    char err[64];
+    JsonDocument resp;
+    return doPost("/sync/push", bodyStr, token, resp, err, sizeof(err));
+}
