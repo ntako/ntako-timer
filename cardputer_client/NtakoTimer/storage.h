@@ -30,17 +30,24 @@ namespace Storage {
     bool    getBeep();          // default true
     void    saveBeep(bool on);
 
-    // ── Timer durations ───────────────────────────────────────────────────────
-    int     getWorkMin();   // default 25
-    int     getShortMin();  // default 5
-    int     getLongMin();   // default 15
-    void    saveDurations(int work, int shortB, int longB);
+    // ── Alarm & break ─────────────────────────────────────────────────────────
+    int     getAlarmMin();      // 0 = disabled, default 0
+    int     getBreakMin();      // default 5
+    void    saveAlarmBreak(int alarmMin, int breakMin);
 
-    // ── Category persistence (NVS blob) ──────────────────────────────────────
+    // ── Volume ────────────────────────────────────────────────────────────────
+    int     getVolume();        // 0-10, default 8
+    void    saveVolume(int v);
+
+    // ── Category persistence (SD/LittleFS binary file) ───────────────────────
     int     loadCategories(Category* cats, int maxCount); // returns count loaded
     void    saveCategories(const Category* cats, int count);
 
-    // ── Task persistence (NVS blob) ───────────────────────────────────────────
+    // ── Task persistence (SD/LittleFS binary file) ────────────────────────────
     int     loadTasks(Task* tasks, int maxCount);  // returns count loaded
     void    saveTasks(const Task* tasks, int count);
+
+    // ── Session log persistence (SD/LittleFS binary file) ─────────────────────
+    int     loadSessionLog(SessionEntry* log, int maxCount); // returns count loaded
+    bool    saveSessionLog(const SessionEntry* log, int count); // returns false on FS error
 }

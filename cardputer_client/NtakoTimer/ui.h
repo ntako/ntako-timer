@@ -7,11 +7,11 @@ namespace UI {
 
     void drawWifiConnecting(const char* ssid, int dots);
     void drawTaskList(const Task* tasks, int count, int selectedIdx,
-                      bool syncing, const char* userEmail, bool trackingMode,
-                      const Category* cats = nullptr, int catCount = 0);
-    // countUp=true: shows elapsed going up, no progress bar, tracking style
-    void drawTimer(TimerPhase phase, int seconds, int total,
-                   const char* taskName, int completedPomodoros, bool paused, bool countUp);
+                      bool syncing, const char* userEmail,
+                      const Category* cats = nullptr, int catCount = 0,
+                      const int* taskTotalSec = nullptr);
+    // Shows elapsed count-up time; breakCountdownSec > 0 shows break timer when paused
+    void drawTimer(int elapsedSeconds, const char* taskName, bool paused, int breakCountdownSec = 0);
     void drawLoginEmail   (const char* buf, bool cursor);
     void drawLoginPass    (const char* email, const char* passBuf, bool cursor);
     void drawRegisterEmail(const char* buf, bool cursor);
@@ -20,12 +20,12 @@ namespace UI {
     void drawCategoryList(const Category* cats, int count, int selectedIdx);
     void drawNewCategoryName(const char* buf, bool cursor);
     void drawCategoryColorPicker(const char* name, int selectedColorIdx);
+    // Rename existing category: shows original name + editable input
+    void drawRenameCategoryName(const char* originalName, const char* buf, bool cursor);
 
     // Task creation flow
-    void drawNewTaskType(bool isTracker);         // choose pomodoro / tracker
     void drawNewTaskName(const char* buf, bool cursor);
-    void drawNewTaskGoal(const char* name, int goal);
-    void drawNewTaskCategory(const Category* cats, int count, int selectedIdx); // -1 = none
+    void drawNewTaskCategory(const Category* cats, int count, int selectedIdx);
 
     void drawMessage(const char* msg);
 
@@ -39,15 +39,25 @@ namespace UI {
     void drawSetupPass(const char* ssid, const char* buf, bool cursor, bool isEdit);
     void drawSetupApi (const char* buf, bool cursor, bool isEdit);
 
-    // Duration setup screens — label e.g. "Work", step = 1/2/3
-    void drawDurationScreen(const char* label, int minutes, int step);
+    // Session history log (one row per session: task name + duration)
+    void drawSessionLog(const SessionEntry* entries, int count, int scrollIdx);
 
-    // Session history log
-    void drawSessionLog(const SessionEntry* log, int count, int scrollIdx);
-
-    // Task context menu (delete / resume)
+    // Task context menu (complete / restore / category / delete)
     void drawTaskAction(const Task& t);
 
-    // Full-screen keybinding reference
-    void drawHelp();
+    // Alarm & break & volume setup screens
+    void drawSetupAlarmMin(int value);
+    void drawSetupBreakMin(int value);
+    void drawSetupVolume(int value);   // 0-10
+
+    // Category reassignment for existing task
+    void drawEditTaskCategory(const char* taskTitle, const Category* cats, int count, int selectedIdx);
+
+    // Full-screen keybinding reference (page 0 or 1)
+    void drawHelp(int page);
+
+    // Read-only task detail view
+    // catColorHex: hex string e.g. "#6366f1" or "" for no category
+    void drawTaskDetail(const Task& t, const char* catName,
+                        const char* catColorHex, int totalSec);
 }

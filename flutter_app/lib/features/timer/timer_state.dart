@@ -1,28 +1,13 @@
 import 'package:flutter/foundation.dart';
 
-enum TimerPhase { work, shortBreak, longBreak }
-
 enum TimerStatus { idle, running, paused }
-
-enum TimerMode { pomodoro, tracking }
 
 @immutable
 class TimerState {
-  final TimerMode mode;
   final TimerStatus status;
-  final TimerPhase phase;
 
-  /// Countdown remaining — pomodoro mode only.
-  final int remainingSeconds;
-
-  /// Total phase duration — pomodoro mode only.
-  final int totalSeconds;
-
-  /// Count-up elapsed — tracking mode only.
+  /// Count-up elapsed seconds.
   final int elapsedSeconds;
-
-  /// Wall-clock end time for accurate countdown after app resume.
-  final DateTime? targetEndTime;
 
   /// Wall-clock anchor for accurate count-up after app resume.
   /// Represents when tracking "would have started" accounting for pauses.
@@ -30,79 +15,53 @@ class TimerState {
 
   final String? currentTaskId;
 
-  /// Tracks completed work pomodoros to determine long-break trigger.
-  final int completedPomodoros;
-
   /// UUID of the in-progress DB session row (null when idle).
   final String? activeSessionId;
 
+  /// Remaining seconds in the break countdown (0 = no active countdown).
+  final int pauseBreakRemainingSeconds;
+
   const TimerState({
-    this.mode = TimerMode.pomodoro,
     required this.status,
-    required this.phase,
-    required this.remainingSeconds,
-    required this.totalSeconds,
     this.elapsedSeconds = 0,
-    this.targetEndTime,
     this.trackingStartTime,
     this.currentTaskId,
-    this.completedPomodoros = 0,
     this.activeSessionId,
+    this.pauseBreakRemainingSeconds = 0,
   });
 
-  factory TimerState.initial({
-    int workSeconds = 25 * 60,
-    TimerMode mode = TimerMode.pomodoro,
-    String? currentTaskId,
-  }) =>
-      TimerState(
-        mode: mode,
+  factory TimerState.initial({String? currentTaskId}) => TimerState(
         status: TimerStatus.idle,
-        phase: TimerPhase.work,
-        remainingSeconds: workSeconds,
-        totalSeconds: workSeconds,
         elapsedSeconds: 0,
-        completedPomodoros: 0,
         currentTaskId: currentTaskId,
+        pauseBreakRemainingSeconds: 0,
       );
 
-  double get progress =>
-      totalSeconds > 0 ? (totalSeconds - remainingSeconds) / totalSeconds : 0;
-
   TimerState copyWith({
-    TimerMode? mode,
     TimerStatus? status,
-    TimerPhase? phase,
-    int? remainingSeconds,
-    int? totalSeconds,
     int? elapsedSeconds,
-    DateTime? targetEndTime,
-    bool clearTargetEndTime = false,
     DateTime? trackingStartTime,
     bool clearTrackingStartTime = false,
     String? currentTaskId,
     bool clearCurrentTaskId = false,
-    int? completedPomodoros,
     String? activeSessionId,
     bool clearActiveSessionId = false,
+    int? pauseBreakRemainingSeconds,
+    bool clearPauseBreak = false,
   }) =>
       TimerState(
-        mode: mode ?? this.mode,
         status: status ?? this.status,
-        phase: phase ?? this.phase,
-        remainingSeconds: remainingSeconds ?? this.remainingSeconds,
-        totalSeconds: totalSeconds ?? this.totalSeconds,
         elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
-        targetEndTime:
-            clearTargetEndTime ? null : (targetEndTime ?? this.targetEndTime),
         trackingStartTime: clearTrackingStartTime
             ? null
             : (trackingStartTime ?? this.trackingStartTime),
         currentTaskId:
             clearCurrentTaskId ? null : (currentTaskId ?? this.currentTaskId),
-        completedPomodoros: completedPomodoros ?? this.completedPomodoros,
         activeSessionId: clearActiveSessionId
             ? null
             : (activeSessionId ?? this.activeSessionId),
+        pauseBreakRemainingSeconds: clearPauseBreak
+            ? 0
+            : (pauseBreakRemainingSeconds ?? this.pauseBreakRemainingSeconds),
       );
 }

@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers.dart';
+import '../sync/sync_service.dart';
 
 part 'tasks_notifier.g.dart';
 
@@ -13,6 +14,11 @@ const _uuid = Uuid();
 Stream<List<Task>> activeTasks(ActiveTasksRef ref) =>
     ref.watch(appDatabaseProvider).tasksDao.watchActiveTasks();
 
+/// Live map of taskId → total tracked seconds (completed sessions only).
+@riverpod
+Stream<Map<String, int>> taskTotals(TaskTotalsRef ref) =>
+    ref.watch(appDatabaseProvider).sessionsDao.watchTaskTotals();
+
 @riverpod
 class TasksNotifier extends _$TasksNotifier {
   @override
@@ -20,10 +26,8 @@ class TasksNotifier extends _$TasksNotifier {
 
   Future<String> createTask({
     required String title,
-    required String type, // 'pomodoro' | 'tracker'
     String? description,
     String? categoryId,
-    int pomodoroGoal = 4,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final id = _uuid.v4();
@@ -31,14 +35,15 @@ class TasksNotifier extends _$TasksNotifier {
       TasksCompanion(
         id: Value(id),
         title: Value(title),
-        type: Value(type),
+        type: const Value('tracker'),
         description: Value(description),
         categoryId: Value(categoryId),
-        pomodoroGoal: Value(pomodoroGoal),
         createdAt: Value(now),
         updatedAt: Value(now),
       ),
     );
+    // Push to server in background so Cardputer can pick it up on next sync
+    ref.read(syncServiceProvider).sync().ignore();
     return id;
   }
 
@@ -47,7 +52,6 @@ class TasksNotifier extends _$TasksNotifier {
     String? title,
     String? description,
     String? categoryId,
-    int? pomodoroGoal,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await ref.read(appDatabaseProvider).tasksDao.updateTask(
@@ -58,12 +62,31 @@ class TasksNotifier extends _$TasksNotifier {
             description != null ? Value(description) : const Value.absent(),
         categoryId:
             categoryId != null ? Value(categoryId) : const Value.absent(),
-        pomodoroGoal:
-            pomodoroGoal != null ? Value(pomodoroGoal) : const Value.absent(),
         updatedAt: Value(now),
         isSynced: const Value(false),
       ),
     );
+  }
+
+  /// Full edit: title, description, and category (categoryId can be null to remove).
+  Future<void> saveTaskEdit({
+    required String id,
+    required String title,
+    String? description,
+    required String? categoryId,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await ref.read(appDatabaseProvider).tasksDao.updateTask(
+      TasksCompanion(
+        id: Value(id),
+        title: Value(title),
+        description: Value(description),
+        categoryId: Value(categoryId),
+        updatedAt: Value(now),
+        isSynced: const Value(false),
+      ),
+    );
+    ref.read(syncServiceProvider).sync().ignore();
   }
 
   Future<void> toggleComplete(Task task) async {
@@ -84,5 +107,19 @@ class TasksNotifier extends _$TasksNotifier {
 
   Future<void> deleteAllCompleted() async {
     await ref.read(appDatabaseProvider).tasksDao.deleteCompletedTasks();
+  }
+
+  /// Explicitly sets the categoryId for a task (supports setting to null).
+  Future<void> updateTaskCategory(String id, String? categoryId) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await ref.read(appDatabaseProvider).tasksDao.updateTask(
+      TasksCompanion(
+        id: Value(id),
+        categoryId: Value(categoryId),
+        updatedAt: Value(now),
+        isSynced: const Value(false),
+      ),
+    );
+    ref.read(syncServiceProvider).sync().ignore();
   }
 }

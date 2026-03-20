@@ -27,3 +27,11 @@ ALTER TABLE tasks
 
 -- 4. Rename pomodoro_sessions → sessions (skip if sessions already exists)
 RENAME TABLE pomodoro_sessions TO sessions;
+
+-- 5. Remove pomodoro columns from tasks (if present)
+ALTER TABLE tasks
+  DROP COLUMN IF EXISTS pomodoro_goal,
+  DROP COLUMN IF EXISTS pomodoros_done;
+
+-- 6. Update type default to 'tracker'
+ALTER TABLE tasks MODIFY COLUMN type VARCHAR(20) NOT NULL DEFAULT 'tracker';

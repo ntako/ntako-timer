@@ -202,11 +202,8 @@ class _SessionTile extends StatelessWidget {
   }
 
   (String, Color) _typeInfo(String type) => switch (type) {
-    'work' => ('F', Colors.red.shade600),
-    'short_break' => ('P', Colors.green.shade600),
-    'long_break' => ('L', Colors.blue.shade600),
     'tracking' => ('T', Colors.purple.shade600),
-    _ => ('?', Colors.grey),
+    _ => ('T', Colors.purple.shade600),
   };
 
   String _formatDuration(int totalSeconds) {

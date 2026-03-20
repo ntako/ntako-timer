@@ -24,11 +24,7 @@ class Tasks extends Table {
   TextColumn get title => text()();
   TextColumn get description => text().nullable()();
   TextColumn get type =>
-      text().withDefault(const Constant('pomodoro'))(); // 'pomodoro' | 'tracker'
-  IntColumn get pomodoroGoal =>
-      integer().withDefault(const Constant(4))();
-  IntColumn get pomodorosDone =>
-      integer().withDefault(const Constant(0))();
+      text().withDefault(const Constant('tracker'))();
   BoolColumn get isCompleted =>
       boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer()(); // Unix ms
@@ -49,8 +45,7 @@ class Sessions extends Table {
   IntColumn get serverId => integer().nullable()();
   TextColumn get taskId =>
       text().nullable().references(Tasks, #id)();
-  TextColumn get type =>
-      text()(); // 'work' | 'short_break' | 'long_break' | 'tracking'
+  TextColumn get type => text()(); // 'tracking'
   IntColumn get startedAt => integer()();
   IntColumn get endedAt => integer().nullable()();
   IntColumn get durationSeconds => integer()();

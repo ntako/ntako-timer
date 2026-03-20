@@ -164,10 +164,6 @@ int Api::pull(const char* token, int64_t since,
             strlcpy(tk.category_id, t["category_client_id"] | "", sizeof(tk.category_id));
             tk.server_id      = t["id"] | 0;
             strlcpy(tk.title, t["title"] | "Untitled", sizeof(tk.title));
-            const char* tp    = t["type"] | "pomodoro";
-            tk.is_tracker     = (strcmp(tp, "tracker") == 0);
-            tk.pomodoro_goal  = t["pomodoro_goal"]  | 4;
-            tk.pomodoros_done = t["pomodoros_done"] | 0;
             tk.is_completed   = (int)(t["is_completed"] | 0) != 0;
             tk.updated_at     = t["updated_at"] | (int64_t)0;
             tk.created_at     = t["created_at"] | (int64_t)0;
@@ -192,11 +188,9 @@ int Api::pull(const char* token, int64_t since,
                 // taskName resolved by caller from taskId
                 se.taskName[0]  = '\0';
                 se.durationSec  = s["duration_seconds"] | 0;
-                const char* stp = s["type"] | "work";
-                se.isTracker    = (strcmp(stp, "tracking") == 0);
-                if      (strcmp(stp, "short_break") == 0) se.type = PHASE_SHORT_BREAK;
-                else if (strcmp(stp, "long_break")  == 0) se.type = PHASE_LONG_BREAK;
-                else                                      se.type = PHASE_WORK;
+                se.startedAt    = (int64_t)(s["started_at"] | (long long)0);
+                se.endedAt      = (int64_t)(s["ended_at"]   | (long long)0);
+                se.needs_push   = false;  // already on server
                 (*sessionCount)++;
             }
         }
@@ -241,7 +235,7 @@ bool Api::pushCategory(const char* token, Category& cat, char* outErr, size_t er
     return true;
 }
 
-bool Api::pushTask(const char* token, Task& task, char* outErr, size_t errSize) {
+bool Api::pushTask(const char* token, Task& task, char* outErr, size_t errSize, int64_t deletedAt) {
     JsonDocument body;
     body["categories"].to<JsonArray>();
     JsonArray tasks = body["tasks"].to<JsonArray>();
@@ -249,12 +243,11 @@ bool Api::pushTask(const char* token, Task& task, char* outErr, size_t errSize) 
     t["client_id"]            = task.id;
     t["category_client_id"]   = strlen(task.category_id) > 0 ? task.category_id : nullptr;
     t["title"]                = task.title;
-    t["type"]                 = task.is_tracker ? "tracker" : "pomodoro";
-    t["pomodoro_goal"]        = task.pomodoro_goal;
-    t["pomodoros_done"]       = task.pomodoros_done;
+    t["type"]                 = "tracker";
     t["is_completed"]         = task.is_completed ? 1 : 0;
     t["created_at"]           = task.created_at;
     t["updated_at"]           = task.updated_at;
+    if (deletedAt > 0) t["deleted_at"] = deletedAt;
     body["sessions"].to<JsonArray>();
 
     String bodyStr;

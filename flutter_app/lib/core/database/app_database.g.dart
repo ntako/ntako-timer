@@ -579,31 +579,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('pomodoro'),
-  );
-  static const VerificationMeta _pomodoroGoalMeta = const VerificationMeta(
-    'pomodoroGoal',
-  );
-  @override
-  late final GeneratedColumn<int> pomodoroGoal = GeneratedColumn<int>(
-    'pomodoro_goal',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(4),
-  );
-  static const VerificationMeta _pomodorosDoneMeta = const VerificationMeta(
-    'pomodorosDone',
-  );
-  @override
-  late final GeneratedColumn<int> pomodorosDone = GeneratedColumn<int>(
-    'pomodoros_done',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant('tracker'),
   );
   static const VerificationMeta _isCompletedMeta = const VerificationMeta(
     'isCompleted',
@@ -676,8 +652,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     title,
     description,
     type,
-    pomodoroGoal,
-    pomodorosDone,
     isCompleted,
     createdAt,
     updatedAt,
@@ -734,24 +708,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
       context.handle(
         _typeMeta,
         type.isAcceptableOrUnknown(data['type']!, _typeMeta),
-      );
-    }
-    if (data.containsKey('pomodoro_goal')) {
-      context.handle(
-        _pomodoroGoalMeta,
-        pomodoroGoal.isAcceptableOrUnknown(
-          data['pomodoro_goal']!,
-          _pomodoroGoalMeta,
-        ),
-      );
-    }
-    if (data.containsKey('pomodoros_done')) {
-      context.handle(
-        _pomodorosDoneMeta,
-        pomodorosDone.isAcceptableOrUnknown(
-          data['pomodoros_done']!,
-          _pomodorosDoneMeta,
-        ),
       );
     }
     if (data.containsKey('is_completed')) {
@@ -824,14 +780,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}type'],
       )!,
-      pomodoroGoal: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}pomodoro_goal'],
-      )!,
-      pomodorosDone: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}pomodoros_done'],
-      )!,
       isCompleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_completed'],
@@ -868,8 +816,6 @@ class Task extends DataClass implements Insertable<Task> {
   final String title;
   final String? description;
   final String type;
-  final int pomodoroGoal;
-  final int pomodorosDone;
   final bool isCompleted;
   final int createdAt;
   final int updatedAt;
@@ -882,8 +828,6 @@ class Task extends DataClass implements Insertable<Task> {
     required this.title,
     this.description,
     required this.type,
-    required this.pomodoroGoal,
-    required this.pomodorosDone,
     required this.isCompleted,
     required this.createdAt,
     required this.updatedAt,
@@ -905,8 +849,6 @@ class Task extends DataClass implements Insertable<Task> {
       map['description'] = Variable<String>(description);
     }
     map['type'] = Variable<String>(type);
-    map['pomodoro_goal'] = Variable<int>(pomodoroGoal);
-    map['pomodoros_done'] = Variable<int>(pomodorosDone);
     map['is_completed'] = Variable<bool>(isCompleted);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -931,8 +873,6 @@ class Task extends DataClass implements Insertable<Task> {
           ? const Value.absent()
           : Value(description),
       type: Value(type),
-      pomodoroGoal: Value(pomodoroGoal),
-      pomodorosDone: Value(pomodorosDone),
       isCompleted: Value(isCompleted),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -955,8 +895,6 @@ class Task extends DataClass implements Insertable<Task> {
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String?>(json['description']),
       type: serializer.fromJson<String>(json['type']),
-      pomodoroGoal: serializer.fromJson<int>(json['pomodoroGoal']),
-      pomodorosDone: serializer.fromJson<int>(json['pomodorosDone']),
       isCompleted: serializer.fromJson<bool>(json['isCompleted']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
@@ -974,8 +912,6 @@ class Task extends DataClass implements Insertable<Task> {
       'title': serializer.toJson<String>(title),
       'description': serializer.toJson<String?>(description),
       'type': serializer.toJson<String>(type),
-      'pomodoroGoal': serializer.toJson<int>(pomodoroGoal),
-      'pomodorosDone': serializer.toJson<int>(pomodorosDone),
       'isCompleted': serializer.toJson<bool>(isCompleted),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
@@ -991,8 +927,6 @@ class Task extends DataClass implements Insertable<Task> {
     String? title,
     Value<String?> description = const Value.absent(),
     String? type,
-    int? pomodoroGoal,
-    int? pomodorosDone,
     bool? isCompleted,
     int? createdAt,
     int? updatedAt,
@@ -1005,8 +939,6 @@ class Task extends DataClass implements Insertable<Task> {
     title: title ?? this.title,
     description: description.present ? description.value : this.description,
     type: type ?? this.type,
-    pomodoroGoal: pomodoroGoal ?? this.pomodoroGoal,
-    pomodorosDone: pomodorosDone ?? this.pomodorosDone,
     isCompleted: isCompleted ?? this.isCompleted,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1025,12 +957,6 @@ class Task extends DataClass implements Insertable<Task> {
           ? data.description.value
           : this.description,
       type: data.type.present ? data.type.value : this.type,
-      pomodoroGoal: data.pomodoroGoal.present
-          ? data.pomodoroGoal.value
-          : this.pomodoroGoal,
-      pomodorosDone: data.pomodorosDone.present
-          ? data.pomodorosDone.value
-          : this.pomodorosDone,
       isCompleted: data.isCompleted.present
           ? data.isCompleted.value
           : this.isCompleted,
@@ -1050,8 +976,6 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('type: $type, ')
-          ..write('pomodoroGoal: $pomodoroGoal, ')
-          ..write('pomodorosDone: $pomodorosDone, ')
           ..write('isCompleted: $isCompleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1069,8 +993,6 @@ class Task extends DataClass implements Insertable<Task> {
     title,
     description,
     type,
-    pomodoroGoal,
-    pomodorosDone,
     isCompleted,
     createdAt,
     updatedAt,
@@ -1087,8 +1009,6 @@ class Task extends DataClass implements Insertable<Task> {
           other.title == this.title &&
           other.description == this.description &&
           other.type == this.type &&
-          other.pomodoroGoal == this.pomodoroGoal &&
-          other.pomodorosDone == this.pomodorosDone &&
           other.isCompleted == this.isCompleted &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -1103,8 +1023,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String> title;
   final Value<String?> description;
   final Value<String> type;
-  final Value<int> pomodoroGoal;
-  final Value<int> pomodorosDone;
   final Value<bool> isCompleted;
   final Value<int> createdAt;
   final Value<int> updatedAt;
@@ -1118,8 +1036,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.title = const Value.absent(),
     this.description = const Value.absent(),
     this.type = const Value.absent(),
-    this.pomodoroGoal = const Value.absent(),
-    this.pomodorosDone = const Value.absent(),
     this.isCompleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1134,8 +1050,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
     required String title,
     this.description = const Value.absent(),
     this.type = const Value.absent(),
-    this.pomodoroGoal = const Value.absent(),
-    this.pomodorosDone = const Value.absent(),
     this.isCompleted = const Value.absent(),
     required int createdAt,
     required int updatedAt,
@@ -1153,8 +1067,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<String>? title,
     Expression<String>? description,
     Expression<String>? type,
-    Expression<int>? pomodoroGoal,
-    Expression<int>? pomodorosDone,
     Expression<bool>? isCompleted,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
@@ -1169,8 +1081,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (type != null) 'type': type,
-      if (pomodoroGoal != null) 'pomodoro_goal': pomodoroGoal,
-      if (pomodorosDone != null) 'pomodoros_done': pomodorosDone,
       if (isCompleted != null) 'is_completed': isCompleted,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1187,8 +1097,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String>? title,
     Value<String?>? description,
     Value<String>? type,
-    Value<int>? pomodoroGoal,
-    Value<int>? pomodorosDone,
     Value<bool>? isCompleted,
     Value<int>? createdAt,
     Value<int>? updatedAt,
@@ -1203,8 +1111,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
       title: title ?? this.title,
       description: description ?? this.description,
       type: type ?? this.type,
-      pomodoroGoal: pomodoroGoal ?? this.pomodoroGoal,
-      pomodorosDone: pomodorosDone ?? this.pomodorosDone,
       isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1234,12 +1140,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
     }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
-    }
-    if (pomodoroGoal.present) {
-      map['pomodoro_goal'] = Variable<int>(pomodoroGoal.value);
-    }
-    if (pomodorosDone.present) {
-      map['pomodoros_done'] = Variable<int>(pomodorosDone.value);
     }
     if (isCompleted.present) {
       map['is_completed'] = Variable<bool>(isCompleted.value);
@@ -1271,8 +1171,6 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('type: $type, ')
-          ..write('pomodoroGoal: $pomodoroGoal, ')
-          ..write('pomodorosDone: $pomodorosDone, ')
           ..write('isCompleted: $isCompleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2492,8 +2390,6 @@ typedef $$TasksTableCreateCompanionBuilder =
       required String title,
       Value<String?> description,
       Value<String> type,
-      Value<int> pomodoroGoal,
-      Value<int> pomodorosDone,
       Value<bool> isCompleted,
       required int createdAt,
       required int updatedAt,
@@ -2509,8 +2405,6 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> description,
       Value<String> type,
-      Value<int> pomodoroGoal,
-      Value<int> pomodorosDone,
       Value<bool> isCompleted,
       Value<int> createdAt,
       Value<int> updatedAt,
@@ -2590,16 +2484,6 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<String> get type => $composableBuilder(
     column: $table.type,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get pomodoroGoal => $composableBuilder(
-    column: $table.pomodoroGoal,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get pomodorosDone => $composableBuilder(
-    column: $table.pomodorosDone,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2711,16 +2595,6 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get pomodoroGoal => $composableBuilder(
-    column: $table.pomodoroGoal,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get pomodorosDone => $composableBuilder(
-    column: $table.pomodorosDone,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<bool> get isCompleted => $composableBuilder(
     column: $table.isCompleted,
     builder: (column) => ColumnOrderings(column),
@@ -2795,16 +2669,6 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<String> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
-
-  GeneratedColumn<int> get pomodoroGoal => $composableBuilder(
-    column: $table.pomodoroGoal,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get pomodorosDone => $composableBuilder(
-    column: $table.pomodorosDone,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<bool> get isCompleted => $composableBuilder(
     column: $table.isCompleted,
@@ -2906,8 +2770,6 @@ class $$TasksTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String> type = const Value.absent(),
-                Value<int> pomodoroGoal = const Value.absent(),
-                Value<int> pomodorosDone = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
@@ -2921,8 +2783,6 @@ class $$TasksTableTableManager
                 title: title,
                 description: description,
                 type: type,
-                pomodoroGoal: pomodoroGoal,
-                pomodorosDone: pomodorosDone,
                 isCompleted: isCompleted,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -2938,8 +2798,6 @@ class $$TasksTableTableManager
                 required String title,
                 Value<String?> description = const Value.absent(),
                 Value<String> type = const Value.absent(),
-                Value<int> pomodoroGoal = const Value.absent(),
-                Value<int> pomodorosDone = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
@@ -2953,8 +2811,6 @@ class $$TasksTableTableManager
                 title: title,
                 description: description,
                 type: type,
-                pomodoroGoal: pomodoroGoal,
-                pomodorosDone: pomodorosDone,
                 isCompleted: isCompleted,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

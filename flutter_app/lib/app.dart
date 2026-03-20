@@ -8,6 +8,7 @@ import 'features/history/history_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/tasks/tasks_screen.dart';
 import 'features/timer/app_lifecycle_observer.dart';
+import 'features/timer/timer_notifier.dart';
 import 'features/timer/timer_screen.dart';
 
 class NtakoTimerApp extends ConsumerWidget {
@@ -93,6 +94,9 @@ class _MainShellState extends ConsumerState<_MainShell>
     super.initState();
     _lifecycleObserver = AppLifecycleObserver(ref);
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(timerNotifierProvider.notifier).recoverDanglingSession();
+    });
   }
 
   @override

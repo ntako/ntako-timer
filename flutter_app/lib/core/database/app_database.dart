@@ -17,22 +17,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
-      if (from < 2) {
-        // v1 → v2: add categories, extend tasks, rename sessions table
-        await m.createTable(categories);
-        await m.addColumn(tasks, tasks.categoryId);
-        await m.addColumn(tasks, tasks.type);
-        await m.renameTable(sessions, 'pomodoro_sessions');
+      // Non-distributed app: destroy and recreate on any schema change
+      for (final table in allTables) {
+        await m.deleteTable(table.actualTableName);
       }
+      await m.createAll();
     },
     beforeOpen: (details) async {
-      // SQLite does not enforce foreign keys by default — enable per connection.
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );

@@ -27,7 +27,7 @@ final activeCategoriesProvider =
 // ignore: unused_element
 typedef ActiveCategoriesRef = AutoDisposeStreamProviderRef<List<Category>>;
 String _$categoriesNotifierHash() =>
-    r'1aed2291ad2588775721277d240d187684ee7ae3';
+    r'32422277981e772dea82f1b728ec5c8490a83503';
 
 /// See also [CategoriesNotifier].
 @ProviderFor(CategoriesNotifier)

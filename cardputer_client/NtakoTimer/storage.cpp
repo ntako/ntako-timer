@@ -49,7 +49,8 @@ void Storage::init() {
     SPI.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
     _sdOk = SD.begin(SD_CS);
     if (!_sdOk) {
-        LittleFS.begin(false);   // mount once, stays mounted
+        // true = format on first use if not already formatted
+        LittleFS.begin(true);   // mount once, stays mounted
     }
 }
 
@@ -84,16 +85,17 @@ void    Storage::saveLastSync(int64_t ms) { prefs.putLong64(NVS_LAST_SYNC, ms); 
 bool Storage::getBeep()         { return prefs.getBool(NVS_BEEP, true); }
 void Storage::saveBeep(bool on) { prefs.putBool(NVS_BEEP, on); }
 
-// ─── Timer durations ──────────────────────────────────────────────────────────
-int  Storage::getWorkMin()  { return prefs.getInt(NVS_WORK_MIN,  25); }
-int  Storage::getShortMin() { return prefs.getInt(NVS_SHORT_MIN,  5); }
-int  Storage::getLongMin()  { return prefs.getInt(NVS_LONG_MIN,  15); }
-
-void Storage::saveDurations(int work, int shortB, int longB) {
-    prefs.putInt(NVS_WORK_MIN,  work);
-    prefs.putInt(NVS_SHORT_MIN, shortB);
-    prefs.putInt(NVS_LONG_MIN,  longB);
+// ─── Alarm & break ────────────────────────────────────────────────────────────
+int  Storage::getAlarmMin()  { return prefs.getInt(NVS_ALARM_MIN, 120); }
+int  Storage::getBreakMin()  { return prefs.getInt(NVS_BREAK_MIN, 15); }
+void Storage::saveAlarmBreak(int alarmMin, int breakMin) {
+    prefs.putInt(NVS_ALARM_MIN, alarmMin);
+    prefs.putInt(NVS_BREAK_MIN, breakMin);
 }
+
+// ─── Volume ───────────────────────────────────────────────────────────────────
+int  Storage::getVolume()    { return prefs.getInt(NVS_VOLUME, 8); }
+void Storage::saveVolume(int v) { prefs.putInt(NVS_VOLUME, v); }
 
 // ─── API URL ──────────────────────────────────────────────────────────────────
 String Storage::getApiUrl() {
@@ -169,37 +171,87 @@ void Storage::addOrUpdateNetwork(const char* ssid, const char* pass) {
     }
 }
 
-// ─── Category persistence (NVS blob) ─────────────────────────────────────────
-// Same approach as tasks: raw binary blob, "cat_cnt" + "cats" keys.
+// ─── Category persistence (SD/LittleFS binary file) ──────────────────────────
+// File format: int32_t count  +  count × sizeof(Category).
+#define CATS_FILE  "/ntako_cats.bin"
 
 int Storage::loadCategories(Category* cats, int maxCount) {
-    int count = min((int)prefs.getInt("cat_cnt", 0), maxCount);
-    if (count <= 0) return 0;
-    size_t got = prefs.getBytes("cats", cats, sizeof(Category) * count);
-    return (got > 0) ? (int)(got / sizeof(Category)) : 0;
+    File f = cfg().open(CATS_FILE, "r");
+    if (!f) return 0;
+    int32_t count = 0;
+    f.read((uint8_t*)&count, sizeof(count));
+    count = min(count, (int32_t)maxCount);
+    size_t expected = sizeof(Category) * count;
+    size_t got = (count > 0) ? f.read((uint8_t*)cats, expected) : 0;
+    f.close();
+    if (count == 0 || got == expected) return (int)count;
+    return 0;  // size mismatch → struct changed, discard
 }
 
 void Storage::saveCategories(const Category* cats, int count) {
-    prefs.putInt("cat_cnt", count);
+    File f = cfg().open(CATS_FILE, "w");
+    if (!f) return;
+    int32_t n = (int32_t)count;
+    f.write((const uint8_t*)&n, sizeof(n));
     if (count > 0)
-        prefs.putBytes("cats", cats, sizeof(Category) * count);
+        f.write((const uint8_t*)cats, sizeof(Category) * count);
+    f.close();
 }
 
-// ─── Task persistence (NVS blob) ─────────────────────────────────────────────
-// Tasks are stored as a raw binary blob — fast read/write, no JSON overhead.
-// "task_cnt" = count, "tasks" = array of Task structs.
+// ─── Task persistence (SD/LittleFS binary file) ───────────────────────────────
+// File format: int32_t count  +  count × sizeof(Task).
+// No NVS blob limit: MAX_TASKS can grow freely.
+#define TASKS_FILE "/ntako_tasks.bin"
 
 int Storage::loadTasks(Task* tasks, int maxCount) {
-    int count = min((int)prefs.getInt("task_cnt", 0), maxCount);
-    if (count <= 0) return 0;
-    size_t got = prefs.getBytes("tasks", tasks, sizeof(Task) * count);
-    return (got > 0) ? (int)(got / sizeof(Task)) : 0;
+    File f = cfg().open(TASKS_FILE, "r");
+    if (!f) return 0;
+    int32_t count = 0;
+    f.read((uint8_t*)&count, sizeof(count));
+    count = min(count, (int32_t)maxCount);
+    size_t expected = sizeof(Task) * count;
+    size_t got = (count > 0) ? f.read((uint8_t*)tasks, expected) : 0;
+    f.close();
+    if (count == 0 || got == expected) return (int)count;
+    return 0;  // size mismatch → struct changed, discard
 }
 
 void Storage::saveTasks(const Task* tasks, int count) {
-    prefs.putInt("task_cnt", count);
+    File f = cfg().open(TASKS_FILE, "w");
+    if (!f) return;
+    int32_t n = (int32_t)count;
+    f.write((const uint8_t*)&n, sizeof(n));
     if (count > 0)
-        prefs.putBytes("tasks", tasks, sizeof(Task) * count);
+        f.write((const uint8_t*)tasks, sizeof(Task) * count);
+    f.close();
+}
+
+// ─── Session log persistence (SD/LittleFS binary file) ───────────────────────
+// File format: int32_t count  +  count × sizeof(SessionEntry).
+#define SESSION_FILE "/ntako_sessions.bin"
+
+int Storage::loadSessionLog(SessionEntry* log, int maxCount) {
+    File f = cfg().open(SESSION_FILE, "r");
+    if (!f) return 0;
+    int32_t count = 0;
+    f.read((uint8_t*)&count, sizeof(count));
+    count = min(count, (int32_t)maxCount);
+    size_t expected = sizeof(SessionEntry) * count;
+    size_t got = (count > 0) ? f.read((uint8_t*)log, expected) : 0;
+    f.close();
+    if (count == 0 || got == expected) return (int)count;
+    return 0;  // size mismatch → struct changed, discard
+}
+
+bool Storage::saveSessionLog(const SessionEntry* log, int count) {
+    File f = cfg().open(SESSION_FILE, "w");
+    if (!f) return false;
+    int32_t n = (int32_t)count;
+    f.write((const uint8_t*)&n, sizeof(n));
+    if (count > 0)
+        f.write((const uint8_t*)log, sizeof(SessionEntry) * count);
+    f.close();
+    return true;
 }
 
 bool Storage::importLauncherNetworks() {

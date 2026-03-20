@@ -57,10 +57,37 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
         ),
       );
 
+  /// Returns the most recent open (not-completed) session, if any.
+  /// Used at startup to recover a session interrupted by app kill.
+  Future<Session?> getDanglingSession() =>
+      (select(sessions)
+            ..where((s) => s.isCompleted.equals(false) & s.endedAt.isNull())
+            ..orderBy([(s) => OrderingTerm.desc(s.startedAt)])
+            ..limit(1))
+          .getSingleOrNull();
+
   /// Watch the most recent sessions (all statuses), newest first.
   Stream<List<Session>> watchRecentSessions({int limit = 100}) =>
       (select(sessions)
             ..orderBy([(s) => OrderingTerm.desc(s.startedAt)])
             ..limit(limit))
           .watch();
+
+  /// Watch total tracked seconds per task (completed sessions only).
+  /// Returns a map of taskId → totalSeconds, updated reactively.
+  Stream<Map<String, int>> watchTaskTotals() {
+    final query = customSelect(
+      'SELECT task_id, CAST(SUM(duration_seconds) AS INTEGER) AS total '
+      'FROM sessions '
+      'WHERE task_id IS NOT NULL AND is_completed = 1 '
+      'GROUP BY task_id',
+      readsFrom: {sessions},
+    );
+    return query.watch().map(
+      (rows) => {
+        for (final row in rows)
+          row.read<String>('task_id'): row.read<int>('total'),
+      },
+    );
+  }
 }

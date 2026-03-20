@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers.dart';
+import '../sync/sync_service.dart';
 
 part 'categories_notifier.g.dart';
 
@@ -63,6 +64,7 @@ class CategoriesNotifier extends _$CategoriesNotifier {
         isSynced: const Value(false),
       ),
     );
+    ref.read(syncServiceProvider).sync().ignore();
   }
 
   Future<void> deleteCategory(String id) async {

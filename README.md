@@ -1,6 +1,6 @@
 # NTAKO Timer
 
-App Pomodoro Timer cross-platform (web + Android + iOS) con task list integrata e sincronizzazione cloud opzionale.
+App Time Tracker cross-platform (web + Android + iOS) con task list integrata e sincronizzazione cloud opzionale.
 
 - **Frontend**: Flutter (web + mobile)
 - **Backend**: PHP puro + MySQL — hostabile su qualsiasi hosting economico (Altervista, Aruba, ecc.)

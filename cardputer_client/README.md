@@ -1,6 +1,6 @@
 # NTAKO Timer — Cardputer Client
 
-Pomodoro timer client for the **M5Stack Cardputer** (ESP32-S3).
+Time tracker client for the **M5Stack Cardputer** (ESP32-S3).
 Connects to the same PHP backend as the Flutter app to sync tasks and sessions.
 
 ---
@@ -10,10 +10,9 @@ Connects to the same PHP backend as the Flutter app to sync tasks and sessions.
 - WiFi connection + NTP time sync
 - Login with email/password (JWT stored in flash)
 - Download task list from server (`/sync/pull`)
-- Select a task and start a Pomodoro timer
+- Select a task and start a count-up timer
 - Create new tasks directly on the device
 - Push completed sessions and task updates to the server (`/sync/push`)
-- Full Pomodoro sequence: work → short break → long break
 
 ---
 
@@ -49,8 +48,6 @@ Edit `include/config.h` before building:
 // For local dev on the same LAN as your Docker PC:
 // #define API_BASE_URL "http://192.168.1.100:8080/api"
 ```
-
-Timer durations can also be adjusted there (default: 25/5/15 min).
 
 > **Note**: `config.h` is not committed to git — add it to `.gitignore` if you fork the repo.
 
@@ -91,8 +88,6 @@ PlatformIO will automatically download the M5Cardputer and ArduinoJson libraries
 | Timer (paused) | `ENTER` | Resume |
 | Login / input | `DEL` | Backspace |
 | Login / input | `FN` | Cancel / go back |
-| New task goal | `+` / `-` | Increase / decrease pomodoro goal |
-
 ### First run flow
 
 1. Device connects to WiFi (shows dots).
@@ -120,7 +115,7 @@ cardputer_client/
 │   ├── types.h          ← shared structs and enums
 │   ├── storage.h        ← NVS (flash) helpers
 │   ├── api_client.h     ← HTTP calls to PHP backend
-│   ├── timer_logic.h    ← Pomodoro timer state
+│   ├── timer_logic.h    ← Count-up timer state
 │   └── ui.h             ← display rendering
 └── src/
     ├── main.cpp         ← state machine + keyboard handling

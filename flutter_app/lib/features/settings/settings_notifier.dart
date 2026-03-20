@@ -6,65 +6,58 @@ part 'settings_notifier.g.dart';
 
 @immutable
 class AppSettings {
-  final int workMinutes;
-  final int shortBreakMinutes;
-  final int longBreakMinutes;
-  final int pomodorosBeforeLongBreak;
+  final int alarmVolume;            // 0 = silent; 1-10 = with sound
+  final int breakDurationMinutes;   // 0 = disabled
+  final int sessionDurationMinutes; // 0 = disabled; one-shot at N min
 
   const AppSettings({
-    this.workMinutes = 25,
-    this.shortBreakMinutes = 5,
-    this.longBreakMinutes = 15,
-    this.pomodorosBeforeLongBreak = 4,
+    this.alarmVolume = 8,
+    this.breakDurationMinutes = 15,
+    this.sessionDurationMinutes = 120,
   });
 
   AppSettings copyWith({
-    int? workMinutes,
-    int? shortBreakMinutes,
-    int? longBreakMinutes,
-    int? pomodorosBeforeLongBreak,
-  }) => AppSettings(
-    workMinutes: workMinutes ?? this.workMinutes,
-    shortBreakMinutes: shortBreakMinutes ?? this.shortBreakMinutes,
-    longBreakMinutes: longBreakMinutes ?? this.longBreakMinutes,
-    pomodorosBeforeLongBreak:
-        pomodorosBeforeLongBreak ?? this.pomodorosBeforeLongBreak,
-  );
+    int? alarmVolume,
+    int? breakDurationMinutes,
+    int? sessionDurationMinutes,
+  }) =>
+      AppSettings(
+        alarmVolume:            alarmVolume            ?? this.alarmVolume,
+        breakDurationMinutes:   breakDurationMinutes   ?? this.breakDurationMinutes,
+        sessionDurationMinutes: sessionDurationMinutes ?? this.sessionDurationMinutes,
+      );
 }
 
 @Riverpod(keepAlive: true)
 class SettingsNotifier extends _$SettingsNotifier {
   @override
   Future<AppSettings> build() async {
-    final dao = ref.read(appDatabaseProvider).settingsDao;
-
-    Future<int> get(String key, int defaultValue) async {
-      final v = await dao.getValue(key);
-      return v != null ? (int.tryParse(v) ?? defaultValue) : defaultValue;
-    }
-
+    final db = ref.read(appDatabaseProvider);
+    final volumeStr  = await db.settingsDao.getValue('alarm_volume');
+    final breakStr   = await db.settingsDao.getValue('break_duration_min');
+    final sessionStr = await db.settingsDao.getValue('session_duration_min');
     return AppSettings(
-      workMinutes: await get('work_minutes', 25),
-      shortBreakMinutes: await get('short_break_minutes', 5),
-      longBreakMinutes: await get('long_break_minutes', 15),
-      pomodorosBeforeLongBreak: await get('pomodoros_before_long_break', 4),
+      alarmVolume:            int.tryParse(volumeStr  ?? '') ?? 8,
+      breakDurationMinutes:   int.tryParse(breakStr   ?? '') ?? 15,
+      sessionDurationMinutes: int.tryParse(sessionStr ?? '') ?? 120,
     );
   }
 
-  Future<void> saveSettings(AppSettings settings) async {
-    final dao = ref.read(appDatabaseProvider).settingsDao;
-    await Future.wait([
-      dao.setValue('work_minutes', settings.workMinutes.toString()),
-      dao.setValue(
-        'short_break_minutes',
-        settings.shortBreakMinutes.toString(),
-      ),
-      dao.setValue('long_break_minutes', settings.longBreakMinutes.toString()),
-      dao.setValue(
-        'pomodoros_before_long_break',
-        settings.pomodorosBeforeLongBreak.toString(),
-      ),
-    ]);
-    state = AsyncValue.data(settings);
+  Future<void> setAlarmVolume(int volume) async {
+    await ref.read(appDatabaseProvider).settingsDao.setValue('alarm_volume', volume.toString());
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(alarmVolume: volume));
+  }
+
+  Future<void> setBreakDuration(int minutes) async {
+    await ref.read(appDatabaseProvider).settingsDao.setValue('break_duration_min', minutes.toString());
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(breakDurationMinutes: minutes));
+  }
+
+  Future<void> setSessionDuration(int minutes) async {
+    await ref.read(appDatabaseProvider).settingsDao.setValue('session_duration_min', minutes.toString());
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(sessionDurationMinutes: minutes));
   }
 }

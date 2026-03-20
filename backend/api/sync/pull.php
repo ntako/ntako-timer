@@ -31,11 +31,9 @@ foreach ($categories as &$c) {
 unset($c);
 
 // Fetch tasks modified after $since (includes soft-deleted records)
-// JOIN categories to include the category client_id reference
 $stmt = $pdo->prepare('
     SELECT t.id, t.client_id, c.client_id AS category_client_id,
-           t.title, t.description, t.type,
-           t.pomodoro_goal, t.pomodoros_done, t.is_completed,
+           t.title, t.description, t.is_completed,
            t.created_at, t.updated_at, t.deleted_at
     FROM tasks t
     LEFT JOIN categories c ON t.category_id = c.id
@@ -46,17 +44,15 @@ $stmt->execute([$userId, $since]);
 $tasks = $stmt->fetchAll();
 
 foreach ($tasks as &$t) {
-    $t['id']             = (int) $t['id'];
-    $t['pomodoro_goal']  = (int) $t['pomodoro_goal'];
-    $t['pomodoros_done'] = (int) $t['pomodoros_done'];
-    $t['is_completed']   = (int) $t['is_completed'];
-    $t['created_at']     = (int) $t['created_at'];
-    $t['updated_at']     = (int) $t['updated_at'];
-    $t['deleted_at']     = $t['deleted_at'] !== null ? (int) $t['deleted_at'] : null;
+    $t['id']           = (int) $t['id'];
+    $t['is_completed'] = (int) $t['is_completed'];
+    $t['created_at']   = (int) $t['created_at'];
+    $t['updated_at']   = (int) $t['updated_at'];
+    $t['deleted_at']   = $t['deleted_at'] !== null ? (int) $t['deleted_at'] : null;
 }
 unset($t);
 
-// Fetch sessions created after $since, joining tasks to include client_id reference
+// Fetch sessions created after $since
 $stmt = $pdo->prepare('
     SELECT s.id, s.client_id, t.client_id AS task_client_id,
            s.type, s.started_at, s.ended_at, s.duration_seconds,

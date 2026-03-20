@@ -1,5 +1,5 @@
 name: ntako_timer
-description: "Pomodoro timer with task management and optional cloud sync."
+description: "Time tracker with task management and optional cloud sync."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -26,9 +26,8 @@ dependencies:
   # Secure storage for JWT token
   flutter_secure_storage: ^9.0.0
 
-  # Timer notifications (no-op on web)
+  # Tracking notifications (no-op on web)
   flutter_local_notifications: ^17.0.0
-  timezone: ^0.9.0
 
   # Utilities
   uuid: ^4.3.0

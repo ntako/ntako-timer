@@ -25,7 +25,26 @@ final activeTasksProvider = AutoDisposeStreamProvider<List<Task>>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ActiveTasksRef = AutoDisposeStreamProviderRef<List<Task>>;
-String _$tasksNotifierHash() => r'f1d229befb4ef637abcd4bf1bacc33c369a40c5a';
+String _$taskTotalsHash() => r'1ef1dcdc50de87c9c98cc9fb11c3e5b16565d4d0';
+
+/// Live map of taskId → total tracked seconds (completed sessions only).
+///
+/// Copied from [taskTotals].
+@ProviderFor(taskTotals)
+final taskTotalsProvider = AutoDisposeStreamProvider<Map<String, int>>.internal(
+  taskTotals,
+  name: r'taskTotalsProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$taskTotalsHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef TaskTotalsRef = AutoDisposeStreamProviderRef<Map<String, int>>;
+String _$tasksNotifierHash() => r'8daa11f799066b92237c520881905a943146a10a';
 
 /// See also [TasksNotifier].
 @ProviderFor(TasksNotifier)

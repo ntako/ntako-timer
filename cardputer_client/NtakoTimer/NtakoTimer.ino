@@ -14,16 +14,17 @@
  *  ArduinoJson   >= 7.0.0   (by Benoit Blanchon)
  *
  * ── Key bindings (task list) ──────────────────────────────────────────────
- *  .  next task    ;  prev task   ENTER  start timer
- *  N      new task (→ tipo → name → [goal] → category)
- *  C      categorie (./; nav  N new  D delete  ENTER filter)
+ *  ▼  next task    ▲  prev task   ENTER  start timer
+ *  N      new task (name → category)
+ *  M      categorie (▼▶▲ nav  N new  D delete  ENTER filter)
+ *  C      impostazioni (allarme / break)
  *  S      sync                    L      login
- *  O      WiFi scan / add network D      durate timer
+ *  O      WiFi scan / add network
  *  H      keybinding help         W      session log
  *  A      beep on/off             B      display on/off
  *  (timer)    SPC/ENTER pause     X      stop + salva
- *  (scan)     ./; nav  ENTER pick  T manual SSID  R rescan
- *  (categorie) N nuova  D elimina  ENTER filtro task  FN annulla
+ *  (scan)     ▼▶▲ nav  ENTER pick  T manual SSID  R rescan
+ *  (categorie) N nuova  D elimina  ENTER filtro task  ESC annulla
  * ─────────────────────────────────────────────────────────────────────────
  */
 
@@ -54,17 +55,12 @@ static int   selectedTask = 0;
 static char  jwtToken[512] = "";
 static char  userEmail[64] = "";
 
-// ── Mode ──────────────────────────────────────────────────────────────────────
-static bool trackingMode = false;   // false = Pomodoro, true = Tracking (count-up)
-
 // ── Input buffers — auth ──────────────────────────────────────────────────────
 static char  inputEmail[64]               = "";
 static char  inputPass[64]                = "";
 
 // ── Input buffers — new task ──────────────────────────────────────────────────
 static char  inputTaskName[MAX_TITLE_LEN] = "";
-static int   inputTaskGoal                = 4;
-static bool  inputTaskIsTracker           = false;
 static int   inputTaskCatIdx              = 0;   // 0 = none, 1..catCount = category
 
 // ── Input buffers — new category ─────────────────────────────────────────────
@@ -80,16 +76,10 @@ static bool  displayOn         = true;
 static const uint8_t BRIGHTNESS_ON = 128;
 static bool  beepEnabled       = true;
 
-// ── Duration setup buffers ────────────────────────────────────────────────────
-static int   setupWorkMin  = 25;
-static int   setupShortMin = 5;
-static int   setupLongMin  = 15;
-
 // ── Active session ────────────────────────────────────────────────────────────
 static char    activeSessionId[37] = "";
 static int     activeTaskIdx       = -1;
 static int64_t sessionStartedAt    = 0;
-static int     sessionDurationSec  = 0;
 
 // ── Transient message ─────────────────────────────────────────────────────────
 static char          messageText[80] = "";
@@ -118,15 +108,110 @@ static SessionEntry  sessionLog[MAX_SESSION_LOG];
 static int           sessionLogCount  = 0;
 static int           sessionLogScroll = 0;
 
-static void pushSessionLog(const char* clientId, const char* taskName,
-                            int durationSec, TimerPhase type, bool isTracker) {
+// ── Alarm & break ─────────────────────────────────────────────────────────────
+static int           lastAlarmMinute   = 0;    // last minute that triggered alarm
+static int           pauseCountdownSec = 0;    // break countdown
+static unsigned long lastBreakTickMs   = 0;
+static int           pauseNagSec       = 0;    // nag countdown after break ends
+static unsigned long lastNagTickMs     = 0;
+
+// ── Setup buffers — alarm/break/volume ────────────────────────────────────────
+static int   setupAlarmMin = 120;
+static int   setupBreakMin = 15;
+static int   setupVolume   = 8;
+
+// ── Task editing ──────────────────────────────────────────────────────────────
+static int   editTaskCatIdx = 0;   // category picker for existing task
+static int   helpPage       = 0;   // help screen page (0 or 1)
+
+// ── Task totals & session summaries ───────────────────────────────────────────
+static int         taskTotalSec[MAX_TASKS];
+static TaskSummary sessionSummaries[MAX_TASKS];
+static int         summaryCount = 0;
+
+// Sort tasks[] in place by (hasCategory desc, catName asc, title asc).
+// Also adjusts selectedTask so it still points to the same task.
+static void sortTasksByCategory() {
+    if (taskCount < 2) return;
+    char selId[37] = "";
+    if (selectedTask >= 0 && selectedTask < taskCount)
+        strlcpy(selId, tasks[selectedTask].id, sizeof(selId));
+
+    for (int i = 1; i < taskCount; i++) {
+        Task tmp = tasks[i];
+        bool tmpHas = (tmp.category_id[0] != '\0');
+        const char* tmpCat = "";
+        if (tmpHas) for (int c = 0; c < catCount; c++)
+            if (strcmp(categories[c].id, tmp.category_id) == 0) { tmpCat = categories[c].name; break; }
+
+        int j = i - 1;
+        while (j >= 0) {
+            bool jHas = (tasks[j].category_id[0] != '\0');
+            const char* jCat = "";
+            if (jHas) for (int c = 0; c < catCount; c++)
+                if (strcmp(categories[c].id, tasks[j].category_id) == 0) { jCat = categories[c].name; break; }
+
+            int cmp = tmpHas == jHas ? strcmp(tmpCat, jCat)
+                    : (tmpHas ? -1 : 1);
+            if (cmp == 0) cmp = strcmp(tmp.title, tasks[j].title);
+            if (cmp >= 0) break;
+            tasks[j + 1] = tasks[j];
+            j--;
+        }
+        tasks[j + 1] = tmp;
+    }
+
+    if (selId[0] != '\0')
+        for (int i = 0; i < taskCount; i++)
+            if (strcmp(tasks[i].id, selId) == 0) { selectedTask = i; break; }
+}
+
+// Fill out[i] with total tracked seconds for tasks[i] from the session log.
+static void computeTaskTotals(int* out) {
+    for (int i = 0; i < taskCount; i++) {
+        out[i] = 0;
+        if (tasks[i].id[0] == '\0') continue;
+        for (int s = 0; s < sessionLogCount; s++)
+            if (strcmp(sessionLog[s].taskId, tasks[i].id) == 0)
+                out[i] += sessionLog[s].durationSec;
+    }
+}
+
+// Build aggregated per-task summaries (tasks sorted by category, with sessions only).
+static void buildSummaries(TaskSummary* out, int& count) {
+    count = 0;
+    for (int i = 0; i < taskCount && count < MAX_TASKS; i++) {
+        int total = 0;
+        if (tasks[i].id[0] != '\0')
+            for (int s = 0; s < sessionLogCount; s++)
+                if (strcmp(sessionLog[s].taskId, tasks[i].id) == 0)
+                    total += sessionLog[s].durationSec;
+        if (total == 0) continue;
+
+        TaskSummary& sm = out[count++];
+        strlcpy(sm.name, tasks[i].title, sizeof(sm.name));
+        sm.totalSec    = total;
+        sm.catColor[0] = '\0';
+        for (int c = 0; c < catCount; c++)
+            if (strcmp(categories[c].id, tasks[i].category_id) == 0) {
+                strlcpy(sm.catColor, categories[c].color, sizeof(sm.catColor));
+                break;
+            }
+    }
+}
+
+static void pushSessionLog(const char* clientId, const char* taskId,
+                           const char* taskName, int durationSec,
+                           int64_t startedAt, int64_t endedAt, bool needs_push) {
     int n = min(sessionLogCount, MAX_SESSION_LOG - 1);
     for (int i = n; i > 0; i--) sessionLog[i] = sessionLog[i - 1];
     strlcpy(sessionLog[0].clientId,  clientId,  sizeof(sessionLog[0].clientId));
+    strlcpy(sessionLog[0].taskId,    taskId,    sizeof(sessionLog[0].taskId));
     strlcpy(sessionLog[0].taskName,  taskName,  sizeof(sessionLog[0].taskName));
     sessionLog[0].durationSec = durationSec;
-    sessionLog[0].isTracker   = isTracker;
-    sessionLog[0].type        = type;
+    sessionLog[0].startedAt   = startedAt;
+    sessionLog[0].endedAt     = endedAt;
+    sessionLog[0].needs_push  = needs_push;
     if (sessionLogCount < MAX_SESSION_LOG) sessionLogCount++;
     sessionLogScroll = 0;
 }
@@ -261,16 +346,12 @@ static bool pullFromServer(bool /*forceFull*/ = false) {
         sessionLogScroll = 0;
 
         for (int i = 0; i < sesCount && sessionLogCount < MAX_SESSION_LOG; i++) {
+            sessionLog[sessionLogCount] = _incomingSessions[i]; // copies all fields, needs_push=false
             SessionEntry& se = sessionLog[sessionLogCount];
-            strlcpy(se.clientId, _incomingSessions[i].clientId, sizeof(se.clientId));
-            strlcpy(se.taskId,   _incomingSessions[i].taskId,   sizeof(se.taskId));
-            se.durationSec = _incomingSessions[i].durationSec;
-            se.isTracker   = _incomingSessions[i].isTracker;
-            se.type        = _incomingSessions[i].type;
             // Resolve taskId to title
             bool resolved = false;
             for (int j = 0; j < taskCount; j++) {
-                if (strcmp(tasks[j].id, _incomingSessions[i].taskId) == 0) {
+                if (strcmp(tasks[j].id, se.taskId) == 0) {
                     strlcpy(se.taskName, tasks[j].title, sizeof(se.taskName));
                     resolved = true;
                     break;
@@ -286,15 +367,61 @@ static bool pullFromServer(bool /*forceFull*/ = false) {
 
     if (serverTime > 0) Storage::saveLastSync(serverTime);
     if (selectedTask >= taskCount) selectedTask = max(0, taskCount - 1);
+    sortTasksByCategory();
     return true;
 }
 
 static void doSync() {
     if (strlen(jwtToken) == 0) { showMessage("Not logged in"); return; }
+
+    // Connect WiFi on demand if not already connected
+    if (WiFi.status() != WL_CONNECTED) {
+        // Scan first to see which known networks are actually in range
+        showMessage("Scansione WiFi...", 30000);
+        WiFi.mode(WIFI_STA);
+        int found = WiFi.scanNetworks(); // blocking
+
+        // Populate scan list (for manual fallback)
+        scanCount = min(found, MAX_SCAN_NETS);
+        for (int i = 0; i < scanCount; i++) {
+            strlcpy(scanSSIDs[i], WiFi.SSID(i).c_str(), sizeof(scanSSIDs[i]));
+            scanRSSI[i]     = WiFi.RSSI(i);
+            scanSSIDPtrs[i] = scanSSIDs[i];
+        }
+
+        // Find first saved network visible in scan results
+        int matchNet = -1;
+        for (int s = 0; s < found && matchNet < 0; s++) {
+            String ssid = WiFi.SSID(s);
+            for (int n = 0; n < autoConnectCount; n++) {
+                if (ssid == knownNets[n].ssid) { matchNet = n; break; }
+            }
+        }
+        WiFi.scanDelete();
+
+        if (matchNet < 0) {
+            // No known network in range → let user pick manually
+            scanSelectedIdx = 0;
+            showMessage("Nessuna rete nota in range");
+            appState = ST_WIFI_SCAN_LIST;
+            return;
+        }
+
+        // Connect to matched network
+        showMessage("Connessione WiFi...", 30000);
+        WiFi.begin(knownNets[matchNet].ssid, knownNets[matchNet].pass);
+        unsigned long t0 = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000)
+            delay(200);
+        if (WiFi.status() != WL_CONNECTED) { showMessage("WiFi failed — retry"); return; }
+        configTime(0, 0, "pool.ntp.org", "time.google.com");
+    }
+
     AppState saved = appState;
     appState = ST_SYNCING;
-    UI::drawTaskList(tasks, taskCount, selectedTask, true, userEmail, trackingMode,
-                     categories, catCount);
+    computeTaskTotals(taskTotalSec);
+    UI::drawTaskList(tasks, taskCount, selectedTask, true, userEmail,
+                     categories, catCount, taskTotalSec);
 
     // 1. Push unsynced categories
     for (int i = 0; i < catCount; i++) {
@@ -318,12 +445,26 @@ static void doSync() {
         }
     }
 
-    // 3. Pull and merge server state
+    // 3. Push pending sessions (survived reboot, not yet synced)
+    int sessPushOk = 0;
+    for (int i = 0; i < sessionLogCount; i++) {
+        if (!sessionLog[i].needs_push) continue;
+        if (sessionLog[i].durationSec <= 0) { sessionLog[i].needs_push = false; continue; }
+        bool ok = Api::pushSession(jwtToken, sessionLog[i].clientId,
+                                   sessionLog[i].taskId, "tracking",
+                                   sessionLog[i].startedAt, sessionLog[i].endedAt,
+                                   sessionLog[i].durationSec);
+        if (ok) { sessionLog[i].needs_push = false; sessPushOk++; }
+    }
+    if (sessPushOk > 0) Storage::saveSessionLog(sessionLog, sessionLogCount);
+
+    // 4. Pull and merge server state
     bool pulled = pullFromServer();
 
-    // 4. Persist locally
+    // 5. Persist locally
     Storage::saveCategories(categories, catCount);
     Storage::saveTasks(tasks, taskCount);
+    Storage::saveSessionLog(sessionLog, sessionLogCount);
 
     appState = saved;
 
@@ -363,32 +504,14 @@ static void startWifiScan() {
 }
 
 // ─── Timer ────────────────────────────────────────────────────────────────────
-static int durationForPhase(TimerPhase p) {
-    switch (p) {
-        case PHASE_WORK:        return Storage::getWorkMin()  * 60;
-        case PHASE_SHORT_BREAK: return Storage::getShortMin() * 60;
-        case PHASE_LONG_BREAK:  return Storage::getLongMin()  * 60;
-    }
-    return Storage::getWorkMin() * 60;
-}
-
 static void startTimer(int taskIdx) {
     activeTaskIdx    = taskIdx;
     sessionStartedAt = nowMs();
     generateUUID(activeSessionId);
-
-    // If selected task is a tracker task, override trackingMode
-    bool useTracking = trackingMode;
-    if (taskIdx >= 0 && taskIdx < taskCount && tasks[taskIdx].is_tracker)
-        useTracking = true;
-
-    if (useTracking) {
-        sessionDurationSec = 0;
-        Timer::startCountUp();
-    } else {
-        sessionDurationSec = durationForPhase(Timer::currentPhase);
-        Timer::start(sessionDurationSec);
-    }
+    lastAlarmMinute   = 0;
+    pauseCountdownSec = 0;
+    pauseNagSec       = 0;
+    Timer::startCountUp();
     appState = ST_TIMER_RUNNING;
 }
 
@@ -399,45 +522,36 @@ static void beepDone() {
     M5Cardputer.Speaker.tone(1320, 350); delay(400);
 }
 
-static void completeTimer() {
-    int64_t endedAt = nowMs();
-
-    if (strlen(jwtToken) > 0 && activeTaskIdx >= 0 && activeTaskIdx < taskCount) {
-        const char* typeStr = (Timer::currentPhase == PHASE_WORK)        ? "work"
-                            : (Timer::currentPhase == PHASE_SHORT_BREAK) ? "short_break"
-                                                                          : "long_break";
-        Api::pushSession(jwtToken, activeSessionId,
-                         tasks[activeTaskIdx].id, typeStr,
-                         sessionStartedAt, endedAt, sessionDurationSec);
-
-        if (Timer::currentPhase == PHASE_WORK) {
-            tasks[activeTaskIdx].pomodoros_done++;
-            tasks[activeTaskIdx].updated_at = endedAt;
-            tasks[activeTaskIdx].needs_push = true;
-            Api::pushTask(jwtToken, tasks[activeTaskIdx]);
-            Storage::saveTasks(tasks, taskCount);
-        }
-    }
-
-    beepDone();
-
-    const char* taskName = (activeTaskIdx >= 0 && activeTaskIdx < taskCount)
-                           ? tasks[activeTaskIdx].title : "—";
-    pushSessionLog(activeSessionId, taskName, sessionDurationSec, Timer::currentPhase, false);
-
-    TimerPhase next = Timer::advancePhase();
-    Timer::stop();
-    appState = ST_TASK_LIST;
-
-    const char* msg = (next == PHASE_WORK) ? "Break done — focus time!"
-                                           : "Pomodoro done — break time!";
-    showMessage(msg);
+static void beepAlarm() {
+    if (!beepEnabled) return;
+    M5Cardputer.Speaker.tone(1047, 200); delay(250);
+    M5Cardputer.Speaker.tone(1047, 200); delay(250);
 }
 
-static void completeTrackingSession() {
+static void beepBreakEnd() {
+    if (!beepEnabled) return;
+    M5Cardputer.Speaker.tone(523,  150); delay(200);
+    M5Cardputer.Speaker.tone(659,  150); delay(200);
+    M5Cardputer.Speaker.tone(784,  300); delay(350);
+}
+
+static void completeSession() {
     int elapsed     = Timer::elapsedSeconds();
     int64_t endedAt = nowMs();
 
+    // 1. Persist session immediately (needs_push=true) so a watchdog reboot
+    //    or any crash during the API call cannot lose the data.
+    bool savedLocally = false;
+    if (elapsed > 0) {
+        bool validIdx = (activeTaskIdx >= 0 && activeTaskIdx < taskCount);
+        const char* taskName = validIdx ? tasks[activeTaskIdx].title : "—";
+        const char* taskId   = validIdx ? tasks[activeTaskIdx].id   : "";
+        pushSessionLog(activeSessionId, taskId, taskName, elapsed,
+                       sessionStartedAt, endedAt, /*needs_push=*/true);
+        savedLocally = Storage::saveSessionLog(sessionLog, sessionLogCount);
+    }
+
+    // 2. Try to push to server; if successful, clear needs_push and resave.
     bool syncOk = false;
     if (elapsed > 0 && strlen(jwtToken) > 0
         && activeTaskIdx >= 0 && activeTaskIdx < taskCount) {
@@ -446,23 +560,27 @@ static void completeTrackingSession() {
         syncOk = Api::pushSession(jwtToken, activeSessionId,
                                   tasks[activeTaskIdx].id, "tracking",
                                   sessionStartedAt, endedAt, elapsed);
+        if (syncOk && sessionLogCount > 0) {
+            sessionLog[0].needs_push = false;
+            Storage::saveSessionLog(sessionLog, sessionLogCount);
+        }
     }
 
-    if (elapsed > 0) {
-        const char* taskName = (activeTaskIdx >= 0 && activeTaskIdx < taskCount)
-                               ? tasks[activeTaskIdx].title : "—";
-        pushSessionLog(activeSessionId, taskName, elapsed, PHASE_WORK, true);
-    }
-
+    beepDone();
     Timer::stop();
     appState = ST_TASK_LIST;
 
-    char msg[40];
+    char msg[48];
     int mm = elapsed / 60, ss = elapsed % 60;
-    if (!syncOk && WiFi.status() == WL_CONNECTED && strlen(jwtToken) > 0)
-        snprintf(msg, sizeof(msg), "Tracked %02d:%02d (no sync!)", mm, ss);
-    else
-        snprintf(msg, sizeof(msg), "Tracked %02d:%02d", mm, ss);
+    if (elapsed <= 0) {
+        snprintf(msg, sizeof(msg), "Sessione < 1s, scartata");
+    } else if (syncOk) {
+        snprintf(msg, sizeof(msg), "Tracked %02d:%02d — sync OK", mm, ss);
+    } else if (savedLocally) {
+        snprintf(msg, sizeof(msg), "Tracked %02d:%02d — salvato offline", mm, ss);
+    } else {
+        snprintf(msg, sizeof(msg), "Tracked %02d:%02d — ERRORE salvataggio!", mm, ss);
+    }
     showMessage(msg);
 }
 
@@ -477,6 +595,12 @@ static void backspace(char* buf) {
     if (len > 0) buf[len - 1] = '\0';
 }
 
+// `` ` `` = back / cancel key (replaces Fn)
+static bool hasBack(Keyboard_Class::KeysState& ks) {
+    for (char c : ks.word) if (c == '`') return true;
+    return false;
+}
+
 // ─── Keyboard handlers ────────────────────────────────────────────────────────
 
 static void onKeyTaskList(Keyboard_Class::KeysState& ks) {
@@ -487,29 +611,27 @@ static void onKeyTaskList(Keyboard_Class::KeysState& ks) {
             case ';':
                 if (selectedTask > 0) selectedTask--;             break;
             case 'n': case 'N':
-                // New task: start with type selection
-                inputTaskIsTracker = false;
-                appState = ST_NEW_TASK_TYPE;
+                inputTaskName[0] = '\0';
+                inputTaskCatIdx  = 0;
+                appState = ST_NEW_TASK_NAME;
                 break;
-            case 'c': case 'C':
+            case 'm': case 'M':
                 selectedCat = 0;
                 appState = ST_CATEGORY_LIST;
+                break;
+            case 'c': case 'C':
+                setupAlarmMin = Storage::getAlarmMin();
+                setupBreakMin = Storage::getBreakMin();
+                setupVolume   = Storage::getVolume();
+                appState = ST_SETUP_ALARM_MIN;
                 break;
             case 's': case 'S': doSync(); break;
             case 'l': case 'L':
                 inputEmail[0] = '\0'; inputPass[0] = '\0';
                 appState = ST_LOGIN_EMAIL; break;
-            case 'm': case 'M':
-                trackingMode = !trackingMode;
-                showMessage(trackingMode ? "Mode: Tracking" : "Mode: Pomodoro");
-                break;
-            case 'd': case 'D':
-                setupWorkMin  = Storage::getWorkMin();
-                setupShortMin = Storage::getShortMin();
-                setupLongMin  = Storage::getLongMin();
-                appState = ST_SETUP_WORK_MIN; break;
             case 'h': case 'H':
                 prevState = appState;
+                helpPage  = 0;
                 appState  = ST_HELP; break;
             case 'w': case 'W':
                 sessionLogScroll = 0;
@@ -522,6 +644,10 @@ static void onKeyTaskList(Keyboard_Class::KeysState& ks) {
                 if (taskCount > 0 && selectedTask < taskCount)
                     appState = ST_TASK_ACTION;
                 break;
+            case 'i': case 'I':
+                if (taskCount > 0 && selectedTask < taskCount)
+                    appState = ST_TASK_DETAIL;
+                break;
             default: break;
         }
     }
@@ -531,7 +657,7 @@ static void onKeyTaskList(Keyboard_Class::KeysState& ks) {
 
 // ── Category list ──────────────────────────────────────────────────────────────
 static void onKeyCategoryList(Keyboard_Class::KeysState& ks) {
-    if (ks.fn) { appState = ST_TASK_LIST; return; }
+    if (hasBack(ks)) { appState = ST_TASK_LIST; return; }
 
     for (char c : ks.word) {
         if (c == '.') {
@@ -545,9 +671,6 @@ static void onKeyCategoryList(Keyboard_Class::KeysState& ks) {
             return;
         } else if (c == 'd' || c == 'D') {
             if (catCount > 0 && selectedCat < catCount) {
-                // Remove from local list — push deletion is handled by soft-delete on server
-                // (for simplicity, just remove locally and mark as needing a push)
-                // Shift left
                 for (int i = selectedCat; i < catCount - 1; i++)
                     categories[i] = categories[i + 1];
                 catCount--;
@@ -556,21 +679,43 @@ static void onKeyCategoryList(Keyboard_Class::KeysState& ks) {
                 showMessage("Category deleted");
                 return;
             }
+        } else if (c == 'r' || c == 'R') {
+            if (catCount > 0 && selectedCat < catCount) {
+                strlcpy(inputCatName, categories[selectedCat].name, sizeof(inputCatName));
+                appState = ST_RENAME_CATEGORY;
+                return;
+            }
         }
+    }
+}
+
+// ── Rename category ────────────────────────────────────────────────────────────
+static void onKeyRenameCategory(Keyboard_Class::KeysState& ks) {
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputCatName, sizeof(inputCatName), c); }
+    if (ks.del) backspace(inputCatName);
+    if (hasBack(ks))  { appState = ST_CATEGORY_LIST; return; }
+    if (ks.enter && strlen(inputCatName) > 0) {
+        strlcpy(categories[selectedCat].name, inputCatName, sizeof(categories[selectedCat].name));
+        categories[selectedCat].needs_push = true;
+        if (strlen(jwtToken) > 0)
+            Api::pushCategory(jwtToken, categories[selectedCat]);
+        Storage::saveCategories(categories, catCount);
+        appState = ST_CATEGORY_LIST;
+        showMessage("Category renamed!");
     }
 }
 
 // ── New category — name ────────────────────────────────────────────────────────
 static void onKeyNewCategoryName(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputCatName, sizeof(inputCatName), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputCatName, sizeof(inputCatName), c); }
     if (ks.del) backspace(inputCatName);
-    if (ks.fn)  { appState = ST_CATEGORY_LIST; return; }
+    if (hasBack(ks))  { appState = ST_CATEGORY_LIST; return; }
     if (ks.enter && strlen(inputCatName) > 0) appState = ST_NEW_CATEGORY_COLOR;
 }
 
 // ── New category — colour picker ───────────────────────────────────────────────
 static void onKeyNewCategoryColor(Keyboard_Class::KeysState& ks) {
-    if (ks.fn) { appState = ST_NEW_CATEGORY_NAME; return; }
+    if (hasBack(ks)) { appState = ST_NEW_CATEGORY_NAME; return; }
 
     for (char c : ks.word) {
         if (c == '.' && inputCatColorIdx < CAT_COLOR_COUNT - 1) inputCatColorIdx++;
@@ -596,45 +741,12 @@ static void onKeyNewCategoryColor(Keyboard_Class::KeysState& ks) {
     }
 }
 
-// ── New task — type ────────────────────────────────────────────────────────────
-static void onKeyNewTaskType(Keyboard_Class::KeysState& ks) {
-    if (ks.fn) { appState = ST_TASK_LIST; return; }
-
-    for (char c : ks.word) {
-        if (c == '.' || c == ';') inputTaskIsTracker = !inputTaskIsTracker;
-    }
-
-    if (ks.enter) {
-        inputTaskName[0] = '\0';
-        inputTaskGoal    = 4;
-        appState = ST_NEW_TASK_NAME;
-    }
-}
-
 // ── New task — name ────────────────────────────────────────────────────────────
 static void onKeyNewTaskName(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputTaskName, sizeof(inputTaskName), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputTaskName, sizeof(inputTaskName), c); }
     if (ks.del) backspace(inputTaskName);
-    if (ks.fn)  { appState = ST_NEW_TASK_TYPE; return; }
+    if (hasBack(ks))  { appState = ST_TASK_LIST; return; }
     if (ks.enter && strlen(inputTaskName) > 0) {
-        if (inputTaskIsTracker) {
-            // Tracker tasks skip goal step, go straight to category
-            inputTaskCatIdx = 0;
-            appState = ST_NEW_TASK_CATEGORY;
-        } else {
-            appState = ST_NEW_TASK_GOAL;
-        }
-    }
-}
-
-// ── New task — goal ────────────────────────────────────────────────────────────
-static void onKeyNewTaskGoal(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) {
-        if (c == '+' && inputTaskGoal < 12) inputTaskGoal++;
-        if (c == '-' && inputTaskGoal >  1) inputTaskGoal--;
-    }
-    if (ks.fn) { appState = ST_NEW_TASK_NAME; return; }
-    if (ks.enter) {
         inputTaskCatIdx = 0;
         appState = ST_NEW_TASK_CATEGORY;
     }
@@ -643,7 +755,7 @@ static void onKeyNewTaskGoal(Keyboard_Class::KeysState& ks) {
 // ── New task — category ────────────────────────────────────────────────────────
 static void onKeyNewTaskCategory(Keyboard_Class::KeysState& ks) {
     const int total = catCount + 1;  // item 0 = none, 1..catCount = category
-    if (ks.fn) { appState = inputTaskIsTracker ? ST_NEW_TASK_NAME : ST_NEW_TASK_GOAL; return; }
+    if (hasBack(ks)) { appState = ST_NEW_TASK_NAME; return; }
 
     for (char c : ks.word) {
         if (c == '.' && inputTaskCatIdx < total - 1) inputTaskCatIdx++;
@@ -656,13 +768,10 @@ static void onKeyNewTaskCategory(Keyboard_Class::KeysState& ks) {
             generateUUID(t.id);
             t.server_id   = 0;
             strlcpy(t.title, inputTaskName, sizeof(t.title));
-            t.is_tracker     = inputTaskIsTracker;
-            t.pomodoro_goal  = inputTaskIsTracker ? 0 : inputTaskGoal;
-            t.pomodoros_done = 0;
-            t.is_completed   = false;
-            t.created_at     = nowMs();
-            t.updated_at     = t.created_at;
-            t.needs_push     = true;
+            t.is_completed = false;
+            t.created_at   = nowMs();
+            t.updated_at   = t.created_at;
+            t.needs_push   = true;
 
             // Assign category
             if (inputTaskCatIdx > 0 && inputTaskCatIdx - 1 < catCount)
@@ -677,12 +786,13 @@ static void onKeyNewTaskCategory(Keyboard_Class::KeysState& ks) {
             selectedTask = taskCount;
             taskCount++;
             Storage::saveTasks(tasks, taskCount);
+            sortTasksByCategory();
 
             appState = ST_TASK_LIST;
             if (strlen(jwtToken) > 0 && !pushed)
                 showMessage("Task saved (sync failed!)");
             else
-                showMessage(inputTaskIsTracker ? "Tracker task created!" : "Pomodoro task created!");
+                showMessage("Task created!");
         } else {
             appState = ST_TASK_LIST;
         }
@@ -691,6 +801,7 @@ static void onKeyNewTaskCategory(Keyboard_Class::KeysState& ks) {
 
 static void onKeyLoginEmail(Keyboard_Class::KeysState& ks) {
     for (char c : ks.word) {
+        if (c == '`') continue;
         if (c == 'r' || c == 'R') {
             inputEmail[0] = '\0'; inputPass[0] = '\0';
             appState = ST_REGISTER_EMAIL;
@@ -699,14 +810,14 @@ static void onKeyLoginEmail(Keyboard_Class::KeysState& ks) {
         appendChar(inputEmail, sizeof(inputEmail), c);
     }
     if (ks.del)  backspace(inputEmail);
-    if (ks.fn)   { appState = ST_TASK_LIST; return; }
+    if (hasBack(ks))   { appState = ST_TASK_LIST; return; }
     if (ks.enter && strlen(inputEmail) > 0) appState = ST_LOGIN_PASS;
 }
 
 static void onKeyRegisterEmail(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputEmail, sizeof(inputEmail), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputEmail, sizeof(inputEmail), c); }
     if (ks.del) backspace(inputEmail);
-    if (ks.fn)  { appState = ST_TASK_LIST; return; }
+    if (hasBack(ks))  { appState = ST_TASK_LIST; return; }
     if (ks.enter && strlen(inputEmail) > 0) {
         inputPass[0] = '\0';
         appState = ST_REGISTER_PASS;
@@ -714,9 +825,9 @@ static void onKeyRegisterEmail(Keyboard_Class::KeysState& ks) {
 }
 
 static void onKeyRegisterPass(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputPass, sizeof(inputPass), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputPass, sizeof(inputPass), c); }
     if (ks.del) backspace(inputPass);
-    if (ks.fn)  { appState = ST_REGISTER_EMAIL; return; }
+    if (hasBack(ks))  { appState = ST_REGISTER_EMAIL; return; }
 
     if (ks.enter) {
         if (strlen(inputPass) < 8) { showMessage("Password: min 8 chars!"); return; }
@@ -738,9 +849,9 @@ static void onKeyRegisterPass(Keyboard_Class::KeysState& ks) {
 }
 
 static void onKeyLoginPass(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputPass, sizeof(inputPass), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputPass, sizeof(inputPass), c); }
     if (ks.del) backspace(inputPass);
-    if (ks.fn)  { appState = ST_LOGIN_EMAIL; return; }
+    if (hasBack(ks))  { appState = ST_LOGIN_EMAIL; return; }
 
     if (ks.enter && strlen(inputPass) > 0) {
         showMessage("Logging in...", 60000);
@@ -763,17 +874,43 @@ static void onKeyLoginPass(Keyboard_Class::KeysState& ks) {
 static void onKeyTimer(Keyboard_Class::KeysState& ks) {
     for (char c : ks.word) {
         if (c == ' ' || c == 'p' || c == 'P') {
-            if (Timer::isRunning())     { Timer::pause();  appState = ST_TIMER_PAUSED;  }
-            else if (Timer::isPaused()) { Timer::resume(); appState = ST_TIMER_RUNNING; }
+            if (Timer::isRunning()) {
+                Timer::pause();
+                appState = ST_TIMER_PAUSED;
+                // Start break countdown
+                int brkSec = Storage::getBreakMin() * 60;
+                if (brkSec > 0) {
+                    pauseCountdownSec = brkSec;
+                    lastBreakTickMs   = millis();
+                }
+            } else if (Timer::isPaused()) {
+                Timer::resume();
+                appState = ST_TIMER_RUNNING;
+                pauseCountdownSec = 0;
+                pauseNagSec       = 0;
+            }
         }
         if (c == 'x' || c == 'X') {
-            if (Timer::isCountUp()) completeTrackingSession();
-            else                    { Timer::stop(); appState = ST_TASK_LIST; }
+            pauseCountdownSec = 0;
+            pauseNagSec       = 0;
+            completeSession();
         }
     }
     if (ks.enter) {
-        if (Timer::isRunning())     { Timer::pause();  appState = ST_TIMER_PAUSED;  }
-        else if (Timer::isPaused()) { Timer::resume(); appState = ST_TIMER_RUNNING; }
+        if (Timer::isRunning()) {
+            Timer::pause();
+            appState = ST_TIMER_PAUSED;
+            // Start break countdown
+            int brkSec = Storage::getBreakMin() * 60;
+            if (brkSec > 0) {
+                pauseCountdownSec = brkSec;
+                lastBreakTickMs   = millis();
+            }
+        } else if (Timer::isPaused()) {
+            Timer::resume();
+            appState = ST_TIMER_RUNNING;
+            pauseCountdownSec = 0;
+        }
     }
 }
 
@@ -793,7 +930,7 @@ static void onKeyWifiScanList(Keyboard_Class::KeysState& ks) {
             return;
         }
     }
-    if (ks.fn) { appState = ST_TASK_LIST; return; }
+    if (hasBack(ks)) { appState = ST_TASK_LIST; return; }
 
     if (ks.enter && scanCount > 0 && scanSelectedIdx < scanCount) {
         strlcpy(inputSSID, scanSSIDs[scanSelectedIdx], sizeof(inputSSID));
@@ -809,7 +946,7 @@ static void onKeyWifiScanList(Keyboard_Class::KeysState& ks) {
 }
 
 static void onKeyTaskAction(Keyboard_Class::KeysState& ks) {
-    if (ks.fn) { appState = ST_TASK_LIST; return; }
+    if (hasBack(ks)) { appState = ST_TASK_LIST; return; }
 
     for (char c : ks.word) {
         if (c == 'd' || c == 'D') {
@@ -832,20 +969,106 @@ static void onKeyTaskAction(Keyboard_Class::KeysState& ks) {
             showMessage("Task restored");
             return;
         }
+        if (c == 'c' || c == 'C') {
+            editTaskCatIdx = 0;
+            // Find current category index
+            for (int i = 0; i < catCount; i++) {
+                if (strcmp(categories[i].id, tasks[selectedTask].category_id) == 0) {
+                    editTaskCatIdx = i + 1;
+                    break;
+                }
+            }
+            appState = ST_EDIT_TASK_CATEGORY;
+            return;
+        }
+        if (c == 'x' || c == 'X') {
+            int64_t now64 = nowMs();
+            tasks[selectedTask].deleted_at = now64;
+            tasks[selectedTask].updated_at = now64;
+            tasks[selectedTask].needs_push = true;
+            if (strlen(jwtToken) > 0)
+                Api::pushTask(jwtToken, tasks[selectedTask], nullptr, 0, now64);
+            // Remove from local list
+            for (int i = selectedTask; i < taskCount - 1; i++)
+                tasks[i] = tasks[i + 1];
+            taskCount--;
+            if (selectedTask >= taskCount && taskCount > 0) selectedTask = taskCount - 1;
+            Storage::saveTasks(tasks, taskCount);
+            sortTasksByCategory();
+            appState = ST_TASK_LIST;
+            showMessage("Task eliminato");
+            return;
+        }
+    }
+}
+
+static void onKeySetupAlarmMin(Keyboard_Class::KeysState& ks) {
+    for (char c : ks.word) {
+        if (c == '+' && setupAlarmMin < 60) setupAlarmMin++;
+        if (c == '-' && setupAlarmMin >  0) setupAlarmMin--;
+    }
+    if (hasBack(ks))    { appState = ST_TASK_LIST; return; }
+    if (ks.enter) appState = ST_SETUP_BREAK_MIN;
+}
+
+static void onKeySetupBreakMin(Keyboard_Class::KeysState& ks) {
+    for (char c : ks.word) {
+        if (c == '+' && setupBreakMin < 30) setupBreakMin++;
+        if (c == '-' && setupBreakMin >  0) setupBreakMin--;
+    }
+    if (hasBack(ks)) { appState = ST_SETUP_ALARM_MIN; return; }
+    if (ks.enter) appState = ST_SETUP_VOLUME;
+}
+
+static void onKeySetupVolume(Keyboard_Class::KeysState& ks) {
+    for (char c : ks.word) {
+        if (c == '+' && setupVolume < 10) setupVolume++;
+        if (c == '-' && setupVolume >  0) setupVolume--;
+    }
+    if (hasBack(ks)) { appState = ST_SETUP_BREAK_MIN; return; }
+    if (ks.enter) {
+        Storage::saveAlarmBreak(setupAlarmMin, setupBreakMin);
+        Storage::saveVolume(setupVolume);
+        M5Cardputer.Speaker.setVolume(setupVolume * 25);
+        appState = ST_TASK_LIST;
+        showMessage("Impostazioni salvate!");
+    }
+}
+
+static void onKeyEditTaskCategory(Keyboard_Class::KeysState& ks) {
+    const int total = catCount + 1;
+    if (hasBack(ks)) { appState = ST_TASK_ACTION; return; }
+    for (char c : ks.word) {
+        if (c == '.' && editTaskCatIdx < total - 1) editTaskCatIdx++;
+        if (c == ';' && editTaskCatIdx > 0)         editTaskCatIdx--;
+    }
+    if (ks.enter) {
+        if (editTaskCatIdx > 0 && editTaskCatIdx - 1 < catCount)
+            strlcpy(tasks[selectedTask].category_id, categories[editTaskCatIdx - 1].id, sizeof(tasks[selectedTask].category_id));
+        else
+            tasks[selectedTask].category_id[0] = '\0';
+        tasks[selectedTask].updated_at = nowMs();
+        tasks[selectedTask].needs_push = true;
+        if (strlen(jwtToken) > 0)
+            Api::pushTask(jwtToken, tasks[selectedTask]);
+        Storage::saveTasks(tasks, taskCount);
+        sortTasksByCategory();
+        appState = ST_TASK_LIST;
+        showMessage("Categoria aggiornata!");
     }
 }
 
 static void onKeySetupSSID(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputSSID, sizeof(inputSSID), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputSSID, sizeof(inputSSID), c); }
     if (ks.del) backspace(inputSSID);
-    if (ks.fn)  { appState = ST_WIFI_SCAN_LIST; return; }
+    if (hasBack(ks))  { appState = ST_WIFI_SCAN_LIST; return; }
     if (ks.enter && strlen(inputSSID) > 0) appState = ST_SETUP_PASS;
 }
 
 static void onKeySetupPass(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputWPass, sizeof(inputWPass), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputWPass, sizeof(inputWPass), c); }
     if (ks.del) backspace(inputWPass);
-    if (ks.fn)  { appState = ST_WIFI_SCAN_LIST; return; }
+    if (hasBack(ks))  { appState = ST_WIFI_SCAN_LIST; return; }
     if (ks.enter) {
         Storage::addOrUpdateNetwork(inputSSID, inputWPass);
         autoConnectCount = Storage::getNetworks(knownNets, MAX_WIFI_NETS);
@@ -866,9 +1089,9 @@ static void onKeySetupPass(Keyboard_Class::KeysState& ks) {
 }
 
 static void onKeySetupApi(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) appendChar(inputApiUrl, sizeof(inputApiUrl), c);
+    for (char c : ks.word) { if (c == '`') continue; appendChar(inputApiUrl, sizeof(inputApiUrl), c); }
     if (ks.del) backspace(inputApiUrl);
-    if (ks.fn)  { appState = ST_SETUP_PASS; return; }
+    if (hasBack(ks))  { appState = ST_SETUP_PASS; return; }
 
     if (ks.enter && strlen(inputApiUrl) > 0) {
         Storage::saveApiUrl(inputApiUrl);
@@ -887,38 +1110,6 @@ static void onKeySetupApi(Keyboard_Class::KeysState& ks) {
     }
 }
 
-static void onKeySetupWorkMin(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) {
-        if (c == '+' && setupWorkMin < 90) setupWorkMin++;
-        if (c == '-' && setupWorkMin >  1) setupWorkMin--;
-    }
-    if (ks.fn)    { appState = ST_TASK_LIST; return; }
-    if (ks.enter) appState = ST_SETUP_SHORT_MIN;
-}
-
-static void onKeySetupShortMin(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) {
-        if (c == '+' && setupShortMin < 30) setupShortMin++;
-        if (c == '-' && setupShortMin >  1) setupShortMin--;
-    }
-    if (ks.fn)    { appState = ST_SETUP_WORK_MIN; return; }
-    if (ks.enter) appState = ST_SETUP_LONG_MIN;
-}
-
-static void onKeySetupLongMin(Keyboard_Class::KeysState& ks) {
-    for (char c : ks.word) {
-        if (c == '+' && setupLongMin < 60) setupLongMin++;
-        if (c == '-' && setupLongMin >  1) setupLongMin--;
-    }
-    if (ks.fn) { appState = ST_SETUP_SHORT_MIN; return; }
-
-    if (ks.enter) {
-        Storage::saveDurations(setupWorkMin, setupShortMin, setupLongMin);
-        appState = ST_TASK_LIST;
-        showMessage("Durations saved!");
-    }
-}
-
 // ─── Setup ────────────────────────────────────────────────────────────────────
 void setup() {
     auto cfg = M5.config();
@@ -926,15 +1117,19 @@ void setup() {
     M5Cardputer.Display.setRotation(1);
     M5Cardputer.Display.setBrightness(128);
     M5Cardputer.Speaker.begin();
-    M5Cardputer.Speaker.setVolume(200);
     beepEnabled = Storage::getBeep();
 
     UI::init();
     Storage::init();
+    setupAlarmMin = Storage::getAlarmMin();
+    setupBreakMin = Storage::getBreakMin();
+    setupVolume   = Storage::getVolume();
+    M5Cardputer.Speaker.setVolume(setupVolume * 25);
 
-    // Restore locally-persisted categories and tasks
-    catCount  = Storage::loadCategories(categories, MAX_CATEGORIES);
-    taskCount = Storage::loadTasks(tasks, MAX_TASKS);
+    // Restore locally-persisted categories, tasks, and session log
+    catCount       = Storage::loadCategories(categories, MAX_CATEGORIES);
+    taskCount      = Storage::loadTasks(tasks, MAX_TASKS);
+    sessionLogCount = Storage::loadSessionLog(sessionLog, MAX_SESSION_LOG);
 
     // Restore auth
     String tok = Storage::getToken();
@@ -954,15 +1149,14 @@ void setup() {
 
     autoConnectCount = Storage::getNetworks(knownNets, MAX_WIFI_NETS);
 
-    if (autoConnectCount > 0) {
-        autoConnectIdx = 0;
-        startWifiNet(knownNets[0]);
-    } else if (apiUrl.length() == 0) {
+    if (apiUrl.length() == 0) {
+        // First-run: no server URL configured yet → go through setup
         inputSSID[0] = '\0'; inputWPass[0] = '\0'; inputApiUrl[0] = '\0';
         isEditingSettings = false;
         appState = ST_SETUP_API;
     } else {
-        startWifiScan();
+        // Start directly in task list — WiFi connects on demand (sync key S)
+        appState = ST_TASK_LIST;
     }
 }
 
@@ -1035,7 +1229,7 @@ void loop() {
 
         if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
             Keyboard_Class::KeysState ks = M5Cardputer.Keyboard.keysState();
-            if (ks.fn) {
+            if (hasBack(ks)) {
                 WiFi.scanDelete();
                 scanSelectedIdx = 0;
                 appState        = ST_WIFI_SCAN_LIST;
@@ -1050,11 +1244,46 @@ void loop() {
         return;
     }
 
-    // ── Pomodoro completion ──
-    if (!Timer::isCountUp()
-        && (appState == ST_TIMER_RUNNING || appState == ST_TIMER_PAUSED)
-        && Timer::isComplete()) {
-        completeTimer();
+    // ── Alarm at x-minute intervals ──
+    if (appState == ST_TIMER_RUNNING) {
+        int elaps    = Timer::elapsedSeconds();
+        int alarmMin = Storage::getAlarmMin();
+        if (alarmMin > 0 && elaps > 0) {
+            int thisMin = elaps / 60;
+            if (thisMin > 0 && thisMin % alarmMin == 0 && thisMin != lastAlarmMinute) {
+                lastAlarmMinute = thisMin;
+                beepAlarm();
+            }
+        }
+    }
+
+    // ── Break countdown ──
+    if (appState == ST_TIMER_PAUSED && pauseCountdownSec > 0) {
+        if (now - lastBreakTickMs >= 1000) {
+            lastBreakTickMs = now;
+            pauseCountdownSec--;
+            if (pauseCountdownSec <= 0) {
+                pauseCountdownSec = 0;
+                beepBreakEnd();
+                // Start nagging every minute until the user resumes
+                int alarmMin = Storage::getAlarmMin();
+                pauseNagSec  = (alarmMin > 0 ? alarmMin * 60 : 60);
+                lastNagTickMs = now;
+            }
+        }
+    }
+
+    // ── Post-break nag (repeats until user resumes) ──
+    if (appState == ST_TIMER_PAUSED && pauseNagSec > 0) {
+        if (now - lastNagTickMs >= 1000) {
+            lastNagTickMs = now;
+            pauseNagSec--;
+            if (pauseNagSec <= 0) {
+                beepBreakEnd();
+                int alarmMin = Storage::getAlarmMin();
+                pauseNagSec  = (alarmMin > 0 ? alarmMin * 60 : 60);
+            }
+        }
     }
 
     // ── Keyboard input ──
@@ -1065,7 +1294,7 @@ void loop() {
                             appState == ST_REGISTER_EMAIL      || appState == ST_REGISTER_PASS     ||
                             appState == ST_NEW_TASK_NAME       || appState == ST_NEW_CATEGORY_NAME ||
                             appState == ST_SETUP_SSID          || appState == ST_SETUP_PASS        ||
-                            appState == ST_SETUP_API);
+                            appState == ST_SETUP_API           || appState == ST_RENAME_CATEGORY);
         if (!inTextInput) {
             for (char c : ks.word) {
                 if (c == 'b' || c == 'B') {
@@ -1077,7 +1306,7 @@ void loop() {
                     Storage::saveBeep(beepEnabled);
                     showMessage(beepEnabled ? "Beep: ON" : "Beep: OFF");
                 }
-                (void)c; // '?' unused
+                (void)c;
             }
         }
 
@@ -1086,9 +1315,7 @@ void loop() {
             case ST_CATEGORY_LIST:      onKeyCategoryList(ks);      break;
             case ST_NEW_CATEGORY_NAME:  onKeyNewCategoryName(ks);   break;
             case ST_NEW_CATEGORY_COLOR: onKeyNewCategoryColor(ks);  break;
-            case ST_NEW_TASK_TYPE:      onKeyNewTaskType(ks);       break;
             case ST_NEW_TASK_NAME:      onKeyNewTaskName(ks);       break;
-            case ST_NEW_TASK_GOAL:      onKeyNewTaskGoal(ks);       break;
             case ST_NEW_TASK_CATEGORY:  onKeyNewTaskCategory(ks);   break;
             case ST_LOGIN_EMAIL:        onKeyLoginEmail(ks);        break;
             case ST_LOGIN_PASS:         onKeyLoginPass(ks);         break;
@@ -1112,20 +1339,33 @@ void loop() {
                         }
                     }
                 }
-                if (ks.fn) appState = ST_TASK_LIST;
+                if (hasBack(ks)) appState = ST_TASK_LIST;
                 break;
             case ST_TASK_ACTION:        onKeyTaskAction(ks);        break;
             case ST_REGISTER_EMAIL:     onKeyRegisterEmail(ks);     break;
             case ST_REGISTER_PASS:      onKeyRegisterPass(ks);      break;
             case ST_HELP:
-                if (ks.fn) appState = prevState;
+                for (char c : ks.word) {
+                    if (c == '.') { if (helpPage < 1) helpPage++; }
+                    if (c == ';') { if (helpPage > 0) helpPage--; }
+                }
+                if (hasBack(ks)) appState = prevState;
                 break;
             case ST_SETUP_SSID:         onKeySetupSSID(ks);         break;
             case ST_SETUP_PASS:         onKeySetupPass(ks);         break;
             case ST_SETUP_API:          onKeySetupApi(ks);          break;
-            case ST_SETUP_WORK_MIN:     onKeySetupWorkMin(ks);      break;
-            case ST_SETUP_SHORT_MIN:    onKeySetupShortMin(ks);     break;
-            case ST_SETUP_LONG_MIN:     onKeySetupLongMin(ks);      break;
+            case ST_SETUP_ALARM_MIN:    onKeySetupAlarmMin(ks);     break;
+            case ST_SETUP_BREAK_MIN:    onKeySetupBreakMin(ks);     break;
+            case ST_SETUP_VOLUME:       onKeySetupVolume(ks);       break;
+            case ST_EDIT_TASK_CATEGORY: onKeyEditTaskCategory(ks);  break;
+            case ST_RENAME_CATEGORY:    onKeyRenameCategory(ks);    break;
+            case ST_TASK_DETAIL:
+                if (hasBack(ks)) appState = ST_TASK_LIST;
+                if (!ks.word.empty()) {
+                    for (char c : ks.word)
+                        if (c == 'i' || c == 'I') { appState = ST_TASK_ACTION; break; }
+                }
+                break;
             default:                    break;
         }
     }
@@ -1134,9 +1374,10 @@ void loop() {
     switch (appState) {
         case ST_TASK_LIST:
         case ST_SYNCING:
+            computeTaskTotals(taskTotalSec);
             UI::drawTaskList(tasks, taskCount, selectedTask,
-                             appState == ST_SYNCING, userEmail, trackingMode,
-                             categories, catCount);
+                             appState == ST_SYNCING, userEmail,
+                             categories, catCount, taskTotalSec);
             break;
 
         case ST_CATEGORY_LIST:
@@ -1151,16 +1392,8 @@ void loop() {
             UI::drawCategoryColorPicker(inputCatName, inputCatColorIdx);
             break;
 
-        case ST_NEW_TASK_TYPE:
-            UI::drawNewTaskType(inputTaskIsTracker);
-            break;
-
         case ST_NEW_TASK_NAME:
             UI::drawNewTaskName(inputTaskName, cursorVisible);
-            break;
-
-        case ST_NEW_TASK_GOAL:
-            UI::drawNewTaskGoal(inputTaskName, inputTaskGoal);
             break;
 
         case ST_NEW_TASK_CATEGORY:
@@ -1171,10 +1404,7 @@ void loop() {
         case ST_TIMER_PAUSED: {
             const char* tname = (activeTaskIdx >= 0 && activeTaskIdx < taskCount)
                                 ? tasks[activeTaskIdx].title : "";
-            bool countUp = Timer::isCountUp();
-            int  secs    = countUp ? Timer::elapsedSeconds() : Timer::remainingSeconds();
-            UI::drawTimer(Timer::currentPhase, secs, sessionDurationSec,
-                          tname, Timer::completedPomodoros, Timer::isPaused(), countUp);
+            UI::drawTimer(Timer::elapsedSeconds(), tname, Timer::isPaused(), pauseCountdownSec);
             break;
         }
 
@@ -1195,6 +1425,7 @@ void loop() {
             break;
 
         case ST_SESSION_LOG:
+            if (sessionLogScroll >= sessionLogCount) sessionLogScroll = max(0, sessionLogCount - 1);
             UI::drawSessionLog(sessionLog, sessionLogCount, sessionLogScroll);
             break;
 
@@ -1210,17 +1441,48 @@ void loop() {
         case ST_TASK_ACTION:
             UI::drawTaskAction(tasks[selectedTask]); break;
 
+        case ST_TASK_DETAIL: {
+            const Task& dt = tasks[selectedTask];
+            const char* catName     = "";
+            const char* catColorHex = "";
+            for (int ci = 0; ci < catCount; ci++) {
+                if (strcmp(categories[ci].id, dt.category_id) == 0) {
+                    catName     = categories[ci].name;
+                    catColorHex = categories[ci].color;
+                    break;
+                }
+            }
+            int dtTotal = 0;
+            for (int si = 0; si < sessionLogCount; si++)
+                if (strcmp(sessionLog[si].taskId, dt.id) == 0)
+                    dtTotal += sessionLog[si].durationSec;
+            UI::drawTaskDetail(dt, catName, catColorHex, dtTotal);
+            break;
+        }
+
         case ST_HELP:
-            UI::drawHelp(); break;
+            UI::drawHelp(helpPage); break;
 
-        case ST_SETUP_WORK_MIN:
-            UI::drawDurationScreen("Work", setupWorkMin, 1); break;
+        case ST_SETUP_ALARM_MIN:
+            UI::drawSetupAlarmMin(setupAlarmMin); break;
 
-        case ST_SETUP_SHORT_MIN:
-            UI::drawDurationScreen("Short Break", setupShortMin, 2); break;
+        case ST_SETUP_BREAK_MIN:
+            UI::drawSetupBreakMin(setupBreakMin); break;
 
-        case ST_SETUP_LONG_MIN:
-            UI::drawDurationScreen("Long Break", setupLongMin, 3); break;
+        case ST_SETUP_VOLUME:
+            UI::drawSetupVolume(setupVolume); break;
+
+        case ST_EDIT_TASK_CATEGORY:
+            UI::drawEditTaskCategory(
+                (selectedTask >= 0 && selectedTask < taskCount) ? tasks[selectedTask].title : "",
+                categories, catCount, editTaskCatIdx);
+            break;
+
+        case ST_RENAME_CATEGORY:
+            UI::drawRenameCategoryName(
+                (selectedCat >= 0 && selectedCat < catCount) ? categories[selectedCat].name : "",
+                inputCatName, cursorVisible);
+            break;
 
         default: break;
     }

@@ -2,8 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/database/app_database.dart';
+import '../auth/auth_notifier.dart';
 import '../categories/categories_notifier.dart';
+import '../sync/sync_service.dart';
 import 'tasks_notifier.dart';
+
+// ── Duration format helper ────────────────────────────────────────────────────
+
+String _fmtDuration(int totalSec) {
+  final h = totalSec ~/ 3600;
+  final m = (totalSec % 3600) ~/ 60;
+  if (h > 0) return '${h}h ${m}m';
+  if (m > 0) return '${m}m';
+  return '< 1m';
+}
 
 // ── Color helper ──────────────────────────────────────────────────────────────
 
@@ -31,6 +43,25 @@ class TasksScreen extends ConsumerWidget {
         title: const Text('Task'),
         centerTitle: true,
         actions: [
+          if (ref.watch(authNotifierProvider).valueOrNull?.status ==
+              AuthStatus.authenticated)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              tooltip: 'Sincronizza',
+              onPressed: () async {
+                try {
+                  await ref.read(syncServiceProvider).sync();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Sincronizzazione completata'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } catch (_) {}
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.folder_outlined),
             tooltip: 'Gestisci categorie',
@@ -104,7 +135,10 @@ class TasksScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateDialog(context, ref),
+        onPressed: () => showDialog(
+          context: context,
+          builder: (_) => _TaskDialog(ref: ref),
+        ),
         child: const Icon(Icons.add),
       ),
     );
@@ -123,7 +157,6 @@ class TasksScreen extends ConsumerWidget {
 
     final widgets = <Widget>[];
 
-    // Categorized tasks, sorted alphabetically by category name
     final catKeys = grouped.keys.where((k) => k != null).toList()
       ..sort((a, b) => (catMap[a]?.name ?? '').compareTo(catMap[b]?.name ?? ''));
 
@@ -143,7 +176,6 @@ class TasksScreen extends ConsumerWidget {
       widgets.add(const SizedBox(height: 8));
     }
 
-    // Uncategorized at the bottom
     if (grouped[null] != null && grouped[null]!.isNotEmpty) {
       if (catKeys.isNotEmpty) {
         widgets.add(_SectionHeader(label: 'Senza categoria'));
@@ -160,13 +192,6 @@ class TasksScreen extends ConsumerWidget {
     }
 
     return widgets;
-  }
-
-  void _showCreateDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (_) => _CreateTaskDialog(ref: ref),
-    );
   }
 }
 
@@ -252,10 +277,8 @@ class _TaskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(tasksNotifierProvider.notifier);
-    final isPomodoro = task.type == 'pomodoro';
-    final progress = isPomodoro && task.pomodoroGoal > 0
-        ? task.pomodorosDone / task.pomodoroGoal
-        : 0.0;
+    final totals = ref.watch(taskTotalsProvider).valueOrNull ?? {};
+    final totalSec = totals[task.id] ?? 0;
 
     return Dismissible(
       key: ValueKey(task.id),
@@ -278,58 +301,89 @@ class _TaskCard extends ConsumerWidget {
         margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Tooltip(
-                    message: 'Segna come completato',
-                    child: Checkbox(
-                      value: false,
-                      onChanged: (_) => notifier.toggleComplete(task),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
+              Tooltip(
+                message: 'Segna come completato',
+                child: Checkbox(
+                  value: false,
+                  onChanged: (_) => notifier.toggleComplete(task),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       task.title,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
-                  _TypeBadge(isPomodoro: isPomodoro),
-                ],
-              ),
-              if (task.description != null && task.description!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 8),
-                  child: Text(
-                    task.description!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              if (isPomodoro)
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, right: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: LinearProgressIndicator(
-                          value: progress.clamp(0.0, 1.0),
-                          minHeight: 6,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+                    if (task.description != null && task.description!.isNotEmpty)
                       Text(
-                        '${task.pomodorosDone}/${task.pomodoroGoal} 🍅',
+                        task.description!,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-                    ],
-                  ),
+                    if (category != null || totalSec > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          children: [
+                            if (category != null) ...[
+                              CircleAvatar(
+                                backgroundColor: _parseColor(category!.color),
+                                radius: 4,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                category!.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(color: _parseColor(category!.color)),
+                              ),
+                              if (totalSec > 0) const SizedBox(width: 8),
+                            ],
+                            if (totalSec > 0)
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.timer_outlined,
+                                    size: 12,
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _fmtDuration(totalSec),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(context).colorScheme.outline,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+                tooltip: 'Modifica task',
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => _TaskDialog(ref: ref, task: task),
+                ),
+              ),
             ],
           ),
         ),
@@ -349,7 +403,8 @@ class _CompletedTaskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(tasksNotifierProvider.notifier);
-    final isPomodoro = task.type == 'pomodoro';
+    final totals = ref.watch(taskTotalsProvider).valueOrNull ?? {};
+    final totalSec = totals[task.id] ?? 0;
 
     return Dismissible(
       key: ValueKey(task.id),
@@ -395,12 +450,11 @@ class _CompletedTaskCard extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      isPomodoro
-                          ? '${task.pomodorosDone} pomodori completati'
+                      totalSec > 0
+                          ? 'Tempo totale: ${_fmtDuration(totalSec)}'
                           : 'Tracking completato',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
                   ],
@@ -413,35 +467,6 @@ class _CompletedTaskCard extends ConsumerWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Type badge ────────────────────────────────────────────────────────────────
-
-class _TypeBadge extends StatelessWidget {
-  final bool isPomodoro;
-
-  const _TypeBadge({required this.isPomodoro});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: isPomodoro
-            ? Theme.of(context).colorScheme.primaryContainer
-            : Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        isPomodoro ? '🍅 Pomodoro' : '⏱ Tracker',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: isPomodoro
-                  ? Theme.of(context).colorScheme.onPrimaryContainer
-                  : Theme.of(context).colorScheme.onSecondaryContainer,
-            ),
       ),
     );
   }
@@ -503,23 +528,33 @@ Future<void> _confirmClearCompleted(BuildContext context, WidgetRef ref) async {
   }
 }
 
-// ── Create task dialog ────────────────────────────────────────────────────────
+// ── Create / Edit task dialog ─────────────────────────────────────────────────
+// Pass [task] to edit an existing task; omit to create a new one.
 
-class _CreateTaskDialog extends StatefulWidget {
+class _TaskDialog extends StatefulWidget {
   final WidgetRef ref;
+  final Task? task;
 
-  const _CreateTaskDialog({required this.ref});
+  const _TaskDialog({required this.ref, this.task});
 
   @override
-  State<_CreateTaskDialog> createState() => _CreateTaskDialogState();
+  State<_TaskDialog> createState() => _TaskDialogState();
 }
 
-class _CreateTaskDialogState extends State<_CreateTaskDialog> {
-  final _titleCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  int _pomodoroGoal = 4;
-  String _type = 'pomodoro';
+class _TaskDialogState extends State<_TaskDialog> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descCtrl;
   String? _selectedCategoryId;
+
+  bool get _isEdit => widget.task != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.task?.title ?? '');
+    _descCtrl  = TextEditingController(text: widget.task?.description ?? '');
+    _selectedCategoryId = widget.task?.categoryId;
+  }
 
   @override
   void dispose() {
@@ -533,31 +568,12 @@ class _CreateTaskDialogState extends State<_CreateTaskDialog> {
     final cats = widget.ref.watch(activeCategoriesProvider).value ?? [];
 
     return AlertDialog(
-      title: const Text('Nuovo task'),
+      title: Text(_isEdit ? 'Modifica task' : 'Nuovo task'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Tipo ──────────────────────────────────────────────────────
-            Text('Tipo', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'pomodoro',
-                  label: Text('🍅 Pomodoro'),
-                ),
-                ButtonSegment(
-                  value: 'tracker',
-                  label: Text('⏱ Tracker'),
-                ),
-              ],
-              selected: {_type},
-              onSelectionChanged: (s) => setState(() => _type = s.first),
-            ),
-            const SizedBox(height: 16),
-
             // ── Titolo ────────────────────────────────────────────────────
             TextField(
               controller: _titleCtrl,
@@ -565,7 +581,7 @@ class _CreateTaskDialogState extends State<_CreateTaskDialog> {
                 labelText: 'Titolo *',
                 border: OutlineInputBorder(),
               ),
-              autofocus: true,
+              autofocus: !_isEdit,
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 12),
@@ -582,63 +598,37 @@ class _CreateTaskDialogState extends State<_CreateTaskDialog> {
             const SizedBox(height: 16),
 
             // ── Categoria ─────────────────────────────────────────────────
-            if (cats.isNotEmpty) ...[
-              DropdownButtonFormField<String?>(
-                value: _selectedCategoryId,
-                decoration: const InputDecoration(
-                  labelText: 'Categoria',
-                  border: OutlineInputBorder(),
+            DropdownButtonFormField<String?>(
+              value: cats.any((c) => c.id == _selectedCategoryId)
+                  ? _selectedCategoryId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Categoria',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Nessuna categoria'),
                 ),
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('Nessuna categoria'),
-                  ),
-                  ...cats.map(
-                    (c) => DropdownMenuItem(
-                      value: c.id,
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: _parseColor(c.color),
-                            radius: 8,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(c.name),
-                        ],
-                      ),
+                ...cats.map(
+                  (c) => DropdownMenuItem(
+                    value: c.id,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: _parseColor(c.color),
+                          radius: 8,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(c.name),
+                      ],
                     ),
                   ),
-                ],
-                onChanged: (v) => setState(() => _selectedCategoryId = v),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // ── Obiettivo Pomodori (solo pomodoro) ────────────────────────
-            if (_type == 'pomodoro')
-              Row(
-                children: [
-                  const Text('Obiettivo Pomodori:'),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.remove),
-                    onPressed: _pomodoroGoal > 1
-                        ? () => setState(() => _pomodoroGoal--)
-                        : null,
-                  ),
-                  Text(
-                    '$_pomodoroGoal',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: _pomodoroGoal < 20
-                        ? () => setState(() => _pomodoroGoal++)
-                        : null,
-                  ),
-                ],
-              ),
+                ),
+              ],
+              onChanged: (v) => setState(() => _selectedCategoryId = v),
+            ),
           ],
         ),
       ),
@@ -651,18 +641,26 @@ class _CreateTaskDialogState extends State<_CreateTaskDialog> {
           onPressed: () {
             final title = _titleCtrl.text.trim();
             if (title.isEmpty) return;
-            widget.ref.read(tasksNotifierProvider.notifier).createTask(
-              title: title,
-              type: _type,
-              description: _descCtrl.text.trim().isNotEmpty
-                  ? _descCtrl.text.trim()
-                  : null,
-              categoryId: _selectedCategoryId,
-              pomodoroGoal: _pomodoroGoal,
-            );
+            final desc = _descCtrl.text.trim().isNotEmpty
+                ? _descCtrl.text.trim()
+                : null;
+            if (_isEdit) {
+              widget.ref.read(tasksNotifierProvider.notifier).saveTaskEdit(
+                id: widget.task!.id,
+                title: title,
+                description: desc,
+                categoryId: _selectedCategoryId,
+              );
+            } else {
+              widget.ref.read(tasksNotifierProvider.notifier).createTask(
+                title: title,
+                description: desc,
+                categoryId: _selectedCategoryId,
+              );
+            }
             Navigator.pop(context);
           },
-          child: const Text('Crea'),
+          child: Text(_isEdit ? 'Salva' : 'Crea'),
         ),
       ],
     );

@@ -32,8 +32,10 @@ namespace Api {
 
     // Pushes a single task; updates task.server_id on success. Returns true on success.
     // outErr (optional) receives the server error string on failure.
+    // deletedAt (optional) sends deleted_at timestamp in JSON if > 0.
     bool pushTask(const char* token, Task& task,
-                  char* outErr = nullptr, size_t errSize = 0);
+                  char* outErr = nullptr, size_t errSize = 0,
+                  int64_t deletedAt = 0);
 
     // Pushes a completed session. Returns true on success.
     bool pushSession(const char* token,

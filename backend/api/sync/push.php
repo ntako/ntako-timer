@@ -24,9 +24,6 @@ if (count($categories) > 100 || count($tasks) > 100 || count($sessions) > 500) {
 $isUuid = static fn (string $s): bool =>
     (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $s);
 
-$allowedSessionTypes = ['work', 'short_break', 'long_break', 'tracking'];
-$allowedTaskTypes    = ['pomodoro', 'tracker'];
-
 foreach ($categories as $cat) {
     $cid  = (string) ($cat['client_id'] ?? '');
     $name = (string) ($cat['name']      ?? '');
@@ -40,8 +37,7 @@ foreach ($categories as $cat) {
 foreach ($tasks as $task) {
     $cid   = (string) ($task['client_id'] ?? '');
     $title = (string) ($task['title']     ?? '');
-    $type  = (string) ($task['type']      ?? 'pomodoro');
-    if (!$isUuid($cid) || strlen($title) > 255 || !in_array($type, $allowedTaskTypes, true)) {
+    if (!$isUuid($cid) || strlen($title) > 255) {
         http_response_code(422);
         echo json_encode(['error' => 'Invalid task data']);
         exit;
@@ -49,9 +45,8 @@ foreach ($tasks as $task) {
 }
 
 foreach ($sessions as $session) {
-    $cid  = (string) ($session['client_id'] ?? '');
-    $type = (string) ($session['type']      ?? '');
-    if (!$isUuid($cid) || !in_array($type, $allowedSessionTypes, true)) {
+    $cid = (string) ($session['client_id'] ?? '');
+    if (!$isUuid($cid)) {
         http_response_code(422);
         echo json_encode(['error' => 'Invalid session data']);
         exit;
@@ -124,15 +119,12 @@ try {
     $taskUpsert = $pdo->prepare('
         INSERT INTO tasks
             (user_id, client_id, category_id, title, description, type,
-             pomodoro_goal, pomodoros_done, is_completed, created_at, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             is_completed, created_at, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             category_id    = IF(VALUES(updated_at) > updated_at, VALUES(category_id),    category_id),
             title          = IF(VALUES(updated_at) > updated_at, VALUES(title),           title),
             description    = IF(VALUES(updated_at) > updated_at, VALUES(description),     description),
-            type           = IF(VALUES(updated_at) > updated_at, VALUES(type),            type),
-            pomodoro_goal  = IF(VALUES(updated_at) > updated_at, VALUES(pomodoro_goal),   pomodoro_goal),
-            pomodoros_done = IF(VALUES(updated_at) > updated_at, VALUES(pomodoros_done),  pomodoros_done),
             is_completed   = IF(VALUES(updated_at) > updated_at, VALUES(is_completed),    is_completed),
             deleted_at     = IF(VALUES(updated_at) > updated_at, VALUES(deleted_at),      deleted_at),
             updated_at     = IF(VALUES(updated_at) > updated_at, VALUES(updated_at),      updated_at)
@@ -171,12 +163,10 @@ try {
             $categoryServerId,
             (string) ($task['title'] ?? ''),
             isset($task['description']) ? (string) $task['description'] : null,
-            (string) ($task['type'] ?? 'pomodoro'),
-            (int) ($task['pomodoro_goal']  ?? 4),
-            (int) ($task['pomodoros_done'] ?? 0),
-            (int) ($task['is_completed']   ?? 0),
-            (int) ($task['created_at']     ?? 0),
-            (int) ($task['updated_at']     ?? 0),
+            'tracker',
+            (int) ($task['is_completed'] ?? 0),
+            (int) ($task['created_at']   ?? 0),
+            (int) ($task['updated_at']   ?? 0),
             isset($task['deleted_at']) ? (int) $task['deleted_at'] : null,
         ]);
 
@@ -210,9 +200,10 @@ try {
         WHERE  user_id = ? AND ended_at IS NULL AND started_at < ?
     ')->execute([$nowMs, $userId, $nowMs - 86_400_000]);
 
-    // 2. If the push contains a currently-open session, close every other
-    //    open session for this user that is NOT in the payload.
-    //    (Handles sessions that were synced on start but never completed.)
+    // 2. If the push contains a currently-open session, close other open sessions
+    //    for this user that are NOT in the payload AND are older than 4 hours.
+    //    The age guard prevents closing a legitimate concurrent session on another
+    //    device (e.g. Flutter tracking while Cardputer syncs its own open session).
     $openInPayload = array_filter($sessions, fn($s) => !isset($s['ended_at']));
     if (!empty($openInPayload)) {
         $pushedIds    = array_map(fn($s) => (string) ($s['client_id'] ?? ''), $sessions);
@@ -221,7 +212,8 @@ try {
             UPDATE sessions
             SET    ended_at = ?, is_completed = 0
             WHERE  user_id = ? AND ended_at IS NULL AND client_id NOT IN ($ph)
-        ")->execute([$nowMs, $userId, ...$pushedIds]);
+              AND  started_at < ?
+        ")->execute([$nowMs, $userId, ...$pushedIds, $nowMs - 14_400_000]); // 4 h
     }
 
     $sessionUpsert = $pdo->prepare('
@@ -230,8 +222,10 @@ try {
              duration_seconds, is_completed, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-            ended_at     = COALESCE(ended_at, VALUES(ended_at)),
-            is_completed = IF(is_completed = 0, VALUES(is_completed), is_completed)
+            ended_at         = COALESCE(ended_at, VALUES(ended_at)),
+            duration_seconds = GREATEST(duration_seconds, VALUES(duration_seconds)),
+            is_completed     = IF(is_completed = 0, VALUES(is_completed), is_completed),
+            created_at       = IF(created_at = 0, VALUES(created_at), created_at)
     ');
 
     $getSessionId = $pdo->prepare(
@@ -244,62 +238,47 @@ try {
             continue;
         }
 
-        $sessionType = (string) ($session['type'] ?? 'work');
-
-        // Resolve task server-id AND type from the map or from the DB.
+        // Resolve task server-id from the map or from the DB.
         $taskServerId = null;
-        $taskType     = null;
         $taskClientId = (string) ($session['task_client_id'] ?? '');
         if ($taskClientId !== '') {
             if (isset($taskIdMap[$taskClientId])) {
                 $taskServerId = $taskIdMap[$taskClientId];
-                // Find the task type from the current push payload.
-                foreach ($tasks as $t) {
-                    if ((string) ($t['client_id'] ?? '') === $taskClientId) {
-                        $taskType = (string) ($t['type'] ?? 'pomodoro');
-                        break;
-                    }
-                }
-            }
-            if ($taskServerId === null) {
+            } else {
                 $lookupStmt = $pdo->prepare(
-                    'SELECT id, type FROM tasks WHERE user_id = ? AND client_id = ?'
+                    'SELECT id FROM tasks WHERE user_id = ? AND client_id = ?'
                 );
                 $lookupStmt->execute([$userId, $taskClientId]);
-                /** @var array{id:int,type:string}|false $lookupRow */
+                /** @var array{id:int}|false $lookupRow */
                 $lookupRow = $lookupStmt->fetch();
                 if ($lookupRow !== false) {
                     $taskServerId = (int) $lookupRow['id'];
-                    $taskType     = (string) $lookupRow['type'];
                 }
             }
+        }
 
-            // Validate cross-association: session type must be compatible with task type.
-            // break/long_break sessions are not tied to a specific task type.
-            if ($taskType !== null) {
-                if ($sessionType === 'tracking' && $taskType !== 'tracker') {
-                    throw new \InvalidArgumentException(
-                        "Session '$clientId': type 'tracking' is only valid for tracker tasks"
-                    );
-                }
-                if ($sessionType === 'work' && $taskType !== 'pomodoro') {
-                    throw new \InvalidArgumentException(
-                        "Session '$clientId': type 'work' is only valid for pomodoro tasks"
-                    );
-                }
-            }
+        $startedAt   = (int) ($session['started_at']       ?? 0);
+        $endedAt     = isset($session['ended_at']) ? (int) $session['ended_at'] : null;
+        $durationSec = (int) ($session['duration_seconds'] ?? 0);
+
+        // Offline sessions have no NTP: started_at will be near epoch 0.
+        // Reconstruct timestamps from server time so history is usable.
+        $minValidMs = 946_684_800_000; // 2000-01-01 in ms
+        if ($startedAt < $minValidMs) {
+            $endedAt   = $nowMs;
+            $startedAt = $nowMs - $durationSec * 1000;
         }
 
         $sessionUpsert->execute([
             $userId,
             $taskServerId,
             $clientId,
-            $sessionType,
-            (int) ($session['started_at']       ?? 0),
-            isset($session['ended_at']) ? (int) $session['ended_at'] : null,
-            (int) ($session['duration_seconds'] ?? 0),
-            (int) ($session['is_completed']     ?? 0),
-            (int) ($session['created_at']       ?? 0),
+            'tracking',
+            $startedAt,
+            $endedAt,
+            $durationSec,
+            (int) ($session['is_completed'] ?? 0),
+            $nowMs,  // always server time: ensures pull.php (created_at > since) finds it
         ]);
 
         $getSessionId->execute([$userId, $clientId]);
@@ -320,10 +299,6 @@ try {
         'synced_tasks'      => $syncedTasks,
         'synced_sessions'   => $syncedSessions,
     ]);
-} catch (\InvalidArgumentException $e) {
-    $pdo->rollBack();
-    http_response_code(422);
-    echo json_encode(['error' => $e->getMessage()]);
 } catch (Exception $e) {
     $pdo->rollBack();
     http_response_code(500);
