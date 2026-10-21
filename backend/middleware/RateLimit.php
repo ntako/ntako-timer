@@ -95,22 +95,14 @@ class RateLimit
     }
 
     /**
-     * Resolve the client IP, honouring common reverse-proxy headers.
+     * Resolve the client IP.
+     *
+     * Only REMOTE_ADDR is used: X-Forwarded-For / X-Real-IP are set by the
+     * client unless a trusted proxy overwrites them, so honouring them would
+     * let anyone pick a fresh "IP" per request and bypass the limit.
      */
     private static function clientIp(): string
     {
-        // X-Forwarded-For can contain a comma-separated chain; take the first
-        // (leftmost = original client).
-        $xff = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
-        if ($xff !== '') {
-            return trim(explode(',', $xff)[0]);
-        }
-
-        $xri = trim((string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''));
-        if ($xri !== '') {
-            return $xri;
-        }
-
         return (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
     }
 }

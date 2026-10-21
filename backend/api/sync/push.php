@@ -334,8 +334,10 @@ try {
         'synced_tasks'      => $syncedTasks,
         'synced_sessions'   => $syncedSessions,
     ]);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     $pdo->rollBack();
+    // Details go to the server log only: SQL errors reveal schema and data.
+    error_log('sync/push failed for user ' . $userId . ': ' . $e);
     http_response_code(500);
-    echo json_encode(['error' => 'Sync failed: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Sync failed']);
 }

@@ -25,6 +25,17 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Vary: Origin');
 
+// Last line of defence: anything uncaught is logged, and the client only gets
+// a generic message (hosting defaults may have display_errors on).
+ini_set('display_errors', '0');
+set_exception_handler(static function (Throwable $e): void {
+    error_log('Uncaught: ' . $e);
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    echo json_encode(['error' => 'Internal server error']);
+});
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;

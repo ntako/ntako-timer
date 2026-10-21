@@ -10,9 +10,20 @@ class Auth
 {
     private static string $secret = '';
 
+    /**
+     * Load the signing secret. Exits with 500 if JWT_SECRET is not configured
+     * (see configuredSecret() in config/database.php, which callers include
+     * first) rather than signing tokens with a guessable fallback.
+     */
     public static function init(): void
     {
-        self::$secret = (string) (getenv('JWT_SECRET') ?: 'dev_secret_change_in_production');
+        $secret = configuredSecret('JWT_SECRET');
+        if ($secret === null) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Server configuration error']);
+            exit;
+        }
+        self::$secret = $secret;
     }
 
     /**

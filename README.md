@@ -44,14 +44,15 @@ NTAKO_TIMER/
 cp .env.example .env
 ```
 
-Modifica `.env` con le credenziali desiderate (non usare i valori di default in produzione):
+Modifica `.env` con le credenziali desiderate. `JWT_SECRET` e `ADMIN_PASS` sono obbligatori: se mancano o sono ancora i segnaposto, l'API risponde 500 e il pannello admin resta disabilitato. Per generarli: `openssl rand -hex 32`.
 
 ```
 MYSQL_ROOT_PASSWORD=rootpass
 MYSQL_DATABASE=ntako_timer
 MYSQL_USER=ntako_user
 MYSQL_PASSWORD=ntako_pass
-JWT_SECRET=cambia_questo_con_una_stringa_casuale_di_64_caratteri
+JWT_SECRET=<output di openssl rand -hex 32>
+ADMIN_PASS=<password del pannello admin>
 ```
 
 ### 2. Avvia il backend
@@ -140,20 +141,9 @@ Il token JWT va incluso come `Authorization: Bearer <token>` nelle richieste `/s
 3. **Importa lo schema** — importa `backend/schema.sql` tramite phpMyAdmin.
    Se il database esiste già, esegui invece (una sola volta) le migrazioni non ancora applicate, ad es. `backend/schema_migration_002_sync_version.sql`.
 
-4. **Configura le credenziali** — modifica `backend/config/database.php` con i dati del database reale:
+4. **Configura le credenziali** — copia `config/local.php.example` in `config/local.php` sul server e compila database, `JWT_SECRET` e `ADMIN_PASS` (genera i secret con `openssl rand -hex 32`). Senza `JWT_SECRET` l'API risponde 500; senza `ADMIN_PASS` il pannello admin è disabilitato.
 
-   ```php
-   // Alternativa per hosting senza variabili d'ambiente:
-   // sostituisci getenv('DB_HOST') con la stringa diretta
-   $host = 'localhost';
-   $db   = 'nome_database';
-   $user = 'utente_db';
-   $pass = 'password_db';
-   ```
-
-   > Non committare mai questo file con credenziali reali.
-
-5. **Imposta il JWT secret** — in `backend/middleware/Auth.php`, oppure usando le variabili d'ambiente del pannello hosting se disponibili.
+   > `config/local.php` è in `.gitignore`: non committarlo mai.
 
 ### App Flutter — Web
 

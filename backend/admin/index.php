@@ -10,8 +10,14 @@ header_remove('X-Powered-By');
 
 require_once __DIR__ . '/../config/database.php';
 
-$adminPass  = getenv('ADMIN_PASS') ?: 'admin_change_me';
+// No usable ADMIN_PASS → panel disabled, never a default password.
+$adminPass  = configuredSecret('ADMIN_PASS');
 $loginError = '';
+
+if ($adminPass === null) {
+    unset($_SESSION['ntako_admin']);
+    $loginError = 'Pannello disabilitato: imposta ADMIN_PASS in config/local.php.';
+}
 
 // ── Auth actions ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -20,17 +26,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
         exit;
     }
-    if (hash_equals($adminPass, (string) ($_POST['password'] ?? ''))) {
-        $_SESSION['ntako_admin'] = true;
-        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-        exit;
+    if ($adminPass !== null) {
+        if (hash_equals($adminPass, (string) ($_POST['password'] ?? ''))) {
+            $_SESSION['ntako_admin'] = true;
+            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+            exit;
+        }
+        $loginError = 'Password errata.';
     }
-    $loginError = 'Password errata.';
 }
 
 // ── Login form ────────────────────────────────────────────────────────────────
 if (empty($_SESSION['ntako_admin'])) {
-    http_response_code(401);
+    http_response_code($adminPass === null ? 503 : 401);
     ?>
 <!DOCTYPE html>
 <html lang="it">
