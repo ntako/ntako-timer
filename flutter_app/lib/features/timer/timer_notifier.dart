@@ -17,7 +17,7 @@ const _sessionDurationNotificationId = 46;
 /// Settings key holding the id of the session this device is tracking.
 /// Synced sessions from other devices can be open too, so "any open session"
 /// is not enough to know which one to resume after an app kill.
-const _activeSessionKey = 'active_session_id';
+const activeSessionSettingsKey = 'active_session_id';
 
 @Riverpod(keepAlive: true)
 class TimerNotifier extends _$TimerNotifier {
@@ -74,7 +74,7 @@ class TimerNotifier extends _$TimerNotifier {
         createdAt: Value(now.millisecondsSinceEpoch),
       ),
     );
-    await db.settingsDao.setValue(_activeSessionKey, sessionId);
+    await db.settingsDao.setValue(activeSessionSettingsKey, sessionId);
     state = state.copyWith(
       status: TimerStatus.running,
       trackingStartTime: now,
@@ -143,12 +143,12 @@ class TimerNotifier extends _$TimerNotifier {
     if (state.status != TimerStatus.idle) return;
 
     final db = ref.read(appDatabaseProvider);
-    final activeId = await db.settingsDao.getValue(_activeSessionKey);
+    final activeId = await db.settingsDao.getValue(activeSessionSettingsKey);
     if (activeId == null) return;
 
     final dangling = await db.sessionsDao.getSessionById(activeId);
     if (dangling == null || dangling.endedAt != null) {
-      await db.settingsDao.deleteValue(_activeSessionKey);
+      await db.settingsDao.deleteValue(activeSessionSettingsKey);
       return;
     }
 
@@ -182,7 +182,7 @@ class TimerNotifier extends _$TimerNotifier {
         DateTime.now().millisecondsSinceEpoch,
         state.elapsedSeconds,
       );
-      await db.settingsDao.deleteValue(_activeSessionKey);
+      await db.settingsDao.deleteValue(activeSessionSettingsKey);
     }
 
     state = TimerState.initial(currentTaskId: state.currentTaskId);

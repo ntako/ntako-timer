@@ -9,6 +9,7 @@ header('Pragma: no-cache');
 header_remove('X-Powered-By');
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/export.php';
 
 // No usable ADMIN_PASS → panel disabled, never a default password.
 $adminPass  = configuredSecret('ADMIN_PASS');
@@ -163,6 +164,24 @@ if ($userId > 0) {
     if (!$user) {
         http_response_code(404);
         echo '<p style="padding:2rem;font-family:sans-serif">Utente non trovato.</p>';
+        exit;
+    }
+
+    // Downloads: same formats as the app's backup / CSV export.
+    $export = (string) ($_GET['export'] ?? '');
+    if ($export === 'json' || $export === 'csv') {
+        $fileName = sprintf('ntako_utente%d_%s.%s', $userId, date('Ymd_Hi'), $export);
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        if ($export === 'json') {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(
+                exportBackup($pdo, $userId),
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+        } else {
+            header('Content-Type: text/csv; charset=utf-8');
+            echo exportSessionsCsv($pdo, $userId);
+        }
         exit;
     }
 
@@ -399,6 +418,10 @@ if ($userId > 0) {
   .badge-ok  { background: #eafaf1; color: #1e8449; }
   .badge-run { background: #eaf4fe; color: #2471a3; }
   .badge-del { background: #f5f5f5; color: #aaa; }
+  .exports { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+  .export { padding: .45rem .8rem; border: 1px solid #e84545; border-radius: 7px;
+            color: #e84545; font-size: .8rem; font-weight: 600; text-decoration: none; }
+  .export:hover { background: #e84545; color: #fff; }
   .empty { padding: 1.5rem; color: #aaa; text-align: center; font-size: .88rem;
            background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 </style>
@@ -425,6 +448,12 @@ if ($userId > 0) {
     <h2><?= htmlspecialchars((string) $user['email']) ?></h2>
     <div class="reg">Registrato il <?= date('d/m/Y', strtotime((string) $user['created_at'])) ?>
       &nbsp;·&nbsp; ID #<?= (int) $user['id'] ?></div>
+  </div>
+  <div class="exports">
+    <a class="export" href="?user=<?= (int) $user['id'] ?>&amp;export=json"
+       title="Backup completo, importabile nell'app">⬇ Backup JSON</a>
+    <a class="export" href="?user=<?= (int) $user['id'] ?>&amp;export=csv"
+       title="Sessioni completate, per Excel o Fogli">⬇ Sessioni CSV</a>
   </div>
 </div>
 

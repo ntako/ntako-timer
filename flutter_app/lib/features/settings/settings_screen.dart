@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_notifier.dart';
+import '../backup/backup_section.dart';
 import '../sync/sync_service.dart';
 import 'settings_notifier.dart';
 
@@ -101,6 +102,9 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          const _SectionHeader('Dati'),
+          const BackupSection(),
           const SizedBox(height: 16),
           const _SectionHeader('Account & Sync'),
           if (isLoggedIn) ...[
