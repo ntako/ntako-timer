@@ -81,9 +81,12 @@ class AuthNotifier extends _$AuthNotifier {
         userEmail: user['email'] as String,
       ),
     );
+    // The stored pull cursor may belong to another account: start over.
+    final sync = ref.read(syncServiceProvider);
+    await sync.resetCursor();
     // Pull data from the server in the background; ignore errors silently
     // (the user can manually sync from Settings if this fails).
-    ref.read(syncServiceProvider).sync().ignore();
+    sync.sync().ignore();
   }
 
   String _friendlyError(Object e) {

@@ -6,7 +6,8 @@ import '../../core/providers.dart';
 
 part 'sync_service.g.dart';
 
-@riverpod
+// Kept alive so every caller shares one instance and therefore one lock.
+@Riverpod(keepAlive: true)
 SyncService syncService(SyncServiceRef ref) => SyncService(
   db: ref.watch(appDatabaseProvider),
   api: ref.watch(apiClientProvider),
@@ -18,9 +19,36 @@ class SyncService {
 
   SyncService({required this.db, required this.api});
 
-  Future<void> sync() async {
-    await _push();
-    await _pull();
+  static const _cursorKey = 'sync_cursor';
+  static const _pageSize = 200;
+
+  Future<void>? _running;
+  bool _runAgain = false;
+
+  /// Pushes local changes, then pulls remote ones.
+  ///
+  /// Only one sync runs at a time. A call made while one is running doesn't
+  /// start a second, racing one: it schedules one more round after the
+  /// current one, so a change saved mid-sync still gets pushed.
+  Future<void> sync() {
+    final running = _running;
+    if (running != null) {
+      _runAgain = true;
+      return running;
+    }
+    return _running = _syncRounds().whenComplete(() => _running = null);
+  }
+
+  /// Forget how far we've pulled, so the next sync downloads everything.
+  /// Needed when the account changes.
+  Future<void> resetCursor() => db.settingsDao.deleteValue(_cursorKey);
+
+  Future<void> _syncRounds() async {
+    do {
+      _runAgain = false;
+      await _push();
+      await _pull();
+    } while (_runAgain);
   }
 
   // ----------------------------------------------------------------
@@ -68,46 +96,64 @@ class SyncService {
 
     for (final sc in (result['synced_categories'] as List)) {
       final m = sc as Map<String, dynamic>;
+      final id = m['client_id'] as String;
       await db.categoriesDao.markCategorySynced(
-        m['client_id'] as String,
+        id,
         m['server_id'] as int,
+        categories.firstWhere((c) => c.id == id).updatedAt,
       );
     }
 
     for (final st in (result['synced_tasks'] as List)) {
       final m = st as Map<String, dynamic>;
+      final id = m['client_id'] as String;
       await db.tasksDao.markTaskSynced(
-        m['client_id'] as String,
+        id,
         m['server_id'] as int,
+        tasks.firstWhere((t) => t.id == id).updatedAt,
       );
     }
 
     for (final ss in (result['synced_sessions'] as List)) {
       final m = ss as Map<String, dynamic>;
+      final id = m['client_id'] as String;
       await db.sessionsDao.markSessionSynced(
-        m['client_id'] as String,
+        id,
         m['server_id'] as int,
+        sessions.firstWhere((s) => s.id == id).endedAt,
       );
     }
   }
 
   // ----------------------------------------------------------------
-  // Pull: fetch changes from server since last sync
+  // Pull: fetch changes from server since the stored cursor
   // ----------------------------------------------------------------
 
   Future<void> _pull() async {
-    final lastSyncStr = await db.settingsDao.getValue('last_sync_at');
-    final since = lastSyncStr != null ? int.parse(lastSyncStr) : 0;
+    var cursor = int.tryParse(await db.settingsDao.getValue(_cursorKey) ?? '') ?? 0;
 
-    final result = await api.get(
-      '/sync/pull',
-      params: {'since': since.toString()},
-    );
+    while (true) {
+      final result = await api.get(
+        '/sync/pull',
+        params: {'cursor': '$cursor', 'limit': '$_pageSize'},
+      );
+      cursor = result['cursor'] as int;
 
-    final serverTime = result['server_time'] as int;
+      // Merge the page and advance the cursor together, so an interrupted
+      // sync resumes from the last fully applied page.
+      await db.transaction(() async {
+        await _mergeCategories(result['categories'] as List);
+        await _mergeTasks(result['tasks'] as List);
+        await _mergeSessions(result['sessions'] as List);
+        await db.settingsDao.setValue(_cursorKey, '$cursor');
+      });
 
-    // ── Merge categories ──────────────────────────────────────────────
-    for (final c in (result['categories'] as List)) {
+      if (result['has_more'] != true) break;
+    }
+  }
+
+  Future<void> _mergeCategories(List rows) async {
+    for (final c in rows) {
       final m = c as Map<String, dynamic>;
       final local =
           await db.categoriesDao.getCategoryById(m['client_id'] as String);
@@ -129,9 +175,10 @@ class SyncService {
         ),
       );
     }
+  }
 
-    // ── Merge tasks ───────────────────────────────────────────────────
-    for (final t in (result['tasks'] as List)) {
+  Future<void> _mergeTasks(List rows) async {
+    for (final t in rows) {
       final m = t as Map<String, dynamic>;
       final local = await db.tasksDao.getTaskById(m['client_id'] as String);
 
@@ -155,10 +202,18 @@ class SyncService {
         ),
       );
     }
+  }
 
-    // ── Merge sessions ────────────────────────────────────────────────
-    for (final s in (result['sessions'] as List)) {
+  Future<void> _mergeSessions(List rows) async {
+    for (final s in rows) {
       final m = s as Map<String, dynamic>;
+      final local =
+          await db.sessionsDao.getSessionById(m['client_id'] as String);
+
+      // A local change not pushed yet (e.g. stopped mid-sync) is newer than
+      // the server copy. Keep it: the next push sends it and the server merges.
+      if (local != null && !local.isSynced) continue;
+
       await db.sessionsDao.insertSession(
         SessionsCompanion(
           id: Value(m['client_id'] as String),
@@ -174,7 +229,5 @@ class SyncService {
         ),
       );
     }
-
-    await db.settingsDao.setValue('last_sync_at', serverTime.toString());
   }
 }

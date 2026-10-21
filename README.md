@@ -122,7 +122,7 @@ dart run build_runner build --delete-conflicting-outputs
 |--------|-----------------------|------------------------------------|
 | POST   | `/api/auth/register`  | Registra un nuovo utente           |
 | POST   | `/api/auth/login`     | Accedi e ottieni un JWT            |
-| GET    | `/api/sync/pull`      | Scarica modifiche dal server       |
+| GET    | `/api/sync/pull`      | Scarica modifiche dal server (`?cursor=N&limit=200` incrementale e paginato; `?since=0` istantanea completa, usata dal Cardputer) |
 | POST   | `/api/sync/push`      | Carica modifiche locali sul server |
 
 Il token JWT va incluso come `Authorization: Bearer <token>` nelle richieste `/sync/*`.
@@ -138,6 +138,7 @@ Il token JWT va incluso come `Authorization: Bearer <token>` nelle richieste `/s
 2. **Crea il database** — dal pannello di controllo dell'hosting (es. cPanel) crea un database MySQL e un utente.
 
 3. **Importa lo schema** — importa `backend/schema.sql` tramite phpMyAdmin.
+   Se il database esiste già, esegui invece (una sola volta) le migrazioni non ancora applicate, ad es. `backend/schema_migration_002_sync_version.sql`.
 
 4. **Configura le credenziali** — modifica `backend/config/database.php` con i dati del database reale:
 
@@ -196,7 +197,7 @@ flutter build ipa --dart-define=API_BASE_URL=https://tuodominio.com/api --releas
 | Aspetto | Soluzione |
 |---|---|
 | DB locale | Drift — SQLite su mobile, WASM+IndexedDB su web |
-| Sincronizzazione | Last-write-wins su `updated_at`; soft-delete via `deleted_at` |
+| Sincronizzazione | Last-write-wins su `updated_at`; soft-delete via `deleted_at`; pull incrementale su `version`, contatore per utente assegnato dal server (immune allo sfasamento degli orologi) |
 | Timer in background | `targetEndTime` (timestamp assoluto) ricalcolato a ogni `onAppResume()` |
 | Notifiche | `flutter_local_notifications` con `TZDateTime`; no-op su web |
 | JWT | HMAC-SHA256 manuale in PHP — nessun Composer richiesto |

@@ -71,8 +71,18 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
   Future<List<Task>> getUnsyncedTasks() =>
       (select(tasks)..where((t) => t.isSynced.equals(false))).get();
 
-  Future<void> markTaskSynced(String clientId, int serverId) =>
-      (update(tasks)..where((t) => t.id.equals(clientId))).write(
+  /// Only matches if the row still has the [pushedUpdatedAt] that was sent,
+  /// so an edit made while the push was in flight stays pending.
+  Future<void> markTaskSynced(
+    String clientId,
+    int serverId,
+    int pushedUpdatedAt,
+  ) =>
+      (update(tasks)
+            ..where(
+              (t) => t.id.equals(clientId) & t.updatedAt.equals(pushedUpdatedAt),
+            ))
+          .write(
         TasksCompanion(
           serverId: Value(serverId),
           isSynced: const Value(true),

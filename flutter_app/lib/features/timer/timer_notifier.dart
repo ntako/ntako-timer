@@ -14,6 +14,11 @@ const _uuid = Uuid();
 const _ongoingNotificationId = 43;
 const _sessionDurationNotificationId = 46;
 
+/// Settings key holding the id of the session this device is tracking.
+/// Synced sessions from other devices can be open too, so "any open session"
+/// is not enough to know which one to resume after an app kill.
+const _activeSessionKey = 'active_session_id';
+
 @Riverpod(keepAlive: true)
 class TimerNotifier extends _$TimerNotifier {
   Timer? _ticker;
@@ -58,7 +63,8 @@ class TimerNotifier extends _$TimerNotifier {
     final now = DateTime.now();
     final resolvedTaskId = taskId ?? state.currentTaskId;
 
-    await ref.read(appDatabaseProvider).sessionsDao.insertSession(
+    final db = ref.read(appDatabaseProvider);
+    await db.sessionsDao.insertSession(
       SessionsCompanion(
         id: Value(sessionId),
         taskId: Value(resolvedTaskId),
@@ -68,6 +74,7 @@ class TimerNotifier extends _$TimerNotifier {
         createdAt: Value(now.millisecondsSinceEpoch),
       ),
     );
+    await db.settingsDao.setValue(_activeSessionKey, sessionId);
     state = state.copyWith(
       status: TimerStatus.running,
       trackingStartTime: now,
@@ -135,12 +142,15 @@ class TimerNotifier extends _$TimerNotifier {
   Future<void> recoverDanglingSession() async {
     if (state.status != TimerStatus.idle) return;
 
-    final dangling = await ref
-        .read(appDatabaseProvider)
-        .sessionsDao
-        .getDanglingSession();
+    final db = ref.read(appDatabaseProvider);
+    final activeId = await db.settingsDao.getValue(_activeSessionKey);
+    if (activeId == null) return;
 
-    if (dangling == null) return;
+    final dangling = await db.sessionsDao.getSessionById(activeId);
+    if (dangling == null || dangling.endedAt != null) {
+      await db.settingsDao.deleteValue(_activeSessionKey);
+      return;
+    }
 
     _sessionDurationFired = false;
     final startTime =
@@ -166,14 +176,13 @@ class TimerNotifier extends _$TimerNotifier {
     NotificationService.cancel(_ongoingNotificationId);
 
     if (state.activeSessionId != null) {
-      await ref
-          .read(appDatabaseProvider)
-          .sessionsDao
-          .completeSessionWithDuration(
-            state.activeSessionId!,
-            DateTime.now().millisecondsSinceEpoch,
-            state.elapsedSeconds,
-          );
+      final db = ref.read(appDatabaseProvider);
+      await db.sessionsDao.completeSessionWithDuration(
+        state.activeSessionId!,
+        DateTime.now().millisecondsSinceEpoch,
+        state.elapsedSeconds,
+      );
+      await db.settingsDao.deleteValue(_activeSessionKey);
     }
 
     state = TimerState.initial(currentTaskId: state.currentTaskId);

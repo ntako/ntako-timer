@@ -34,8 +34,26 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
             ))
           .get();
 
-  Future<void> markSessionSynced(String clientId, int serverId) =>
-      (update(sessions)..where((s) => s.id.equals(clientId))).write(
+  Future<Session?> getSessionById(String id) =>
+      (select(sessions)..where((s) => s.id.equals(id))).getSingleOrNull();
+
+  /// Only matches if the session hasn't been closed since the push was sent
+  /// ([pushedEndedAt] null = it was still open), so a stop made while the
+  /// push was in flight stays pending.
+  Future<void> markSessionSynced(
+    String clientId,
+    int serverId,
+    int? pushedEndedAt,
+  ) =>
+      (update(sessions)
+            ..where(
+              (s) =>
+                  s.id.equals(clientId) &
+                  (pushedEndedAt == null
+                      ? s.endedAt.isNull()
+                      : s.endedAt.equals(pushedEndedAt)),
+            ))
+          .write(
         SessionsCompanion(
           serverId: Value(serverId),
           isSynced: const Value(true),
@@ -56,15 +74,6 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
           isSynced: const Value(false),
         ),
       );
-
-  /// Returns the most recent open (not-completed) session, if any.
-  /// Used at startup to recover a session interrupted by app kill.
-  Future<Session?> getDanglingSession() =>
-      (select(sessions)
-            ..where((s) => s.isCompleted.equals(false) & s.endedAt.isNull())
-            ..orderBy([(s) => OrderingTerm.desc(s.startedAt)])
-            ..limit(1))
-          .getSingleOrNull();
 
   /// Watch the most recent sessions (all statuses), newest first.
   Stream<List<Session>> watchRecentSessions({int limit = 100}) =>

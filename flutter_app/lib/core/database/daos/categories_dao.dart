@@ -39,8 +39,18 @@ class CategoriesDao extends DatabaseAccessor<AppDatabase>
   Future<List<Category>> getUnsyncedCategories() =>
       (select(categories)..where((c) => c.isSynced.equals(false))).get();
 
-  Future<void> markCategorySynced(String clientId, int serverId) =>
-      (update(categories)..where((c) => c.id.equals(clientId))).write(
+  /// Only matches if the row still has the [pushedUpdatedAt] that was sent,
+  /// so an edit made while the push was in flight stays pending.
+  Future<void> markCategorySynced(
+    String clientId,
+    int serverId,
+    int pushedUpdatedAt,
+  ) =>
+      (update(categories)
+            ..where(
+              (c) => c.id.equals(clientId) & c.updatedAt.equals(pushedUpdatedAt),
+            ))
+          .write(
         CategoriesCompanion(
           serverId: Value(serverId),
           isSynced: const Value(true),

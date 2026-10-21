@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <sys/time.h>
 
 static char _baseUrl[128] = "";
 
@@ -200,7 +201,11 @@ int Api::pull(const char* token, int64_t since,
 }
 
 bool Api::pushCategory(const char* token, Category& cat, char* outErr, size_t errSize) {
-    int64_t now = (int64_t)millis(); // approximate; server will use its clock
+    // Wall-clock ms. Before NTP has synced this is near epoch 0, and the
+    // server substitutes its own time.
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    int64_t now = (int64_t)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
     JsonDocument body;
     body["tasks"].to<JsonArray>();
     body["sessions"].to<JsonArray>();

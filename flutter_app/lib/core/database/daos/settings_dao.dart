@@ -19,4 +19,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
       into(settings).insertOnConflictUpdate(
         SettingsCompanion(key: Value(key), value: Value(value)),
       );
+
+  Future<void> deleteValue(String key) =>
+      (delete(settings)..where((s) => s.key.equals(key))).go();
 }

@@ -62,17 +62,36 @@ try {
     $syncedTasks      = [];
     $syncedSessions   = [];
 
+    $nowMs = (int) (microtime(true) * 1000);
+
+    // Devices without NTP (Cardputer offline) send timestamps near epoch 0.
+    // Replace them with server time so last-write-wins stays meaningful.
+    $minValidMs = 946_684_800_000; // 2000-01-01 in ms
+    $validTs = static fn (int $ms): int => $ms < $minValidMs ? $nowMs : $ms;
+
+    // Every row written gets the next value of a per-user counter, which
+    // incremental pull uses as its cursor. Locking the user row here also
+    // serialises concurrent pushes, so versions commit in increasing order
+    // and a pull can never skip a row that committed late.
+    $seqStmt = $pdo->prepare('SELECT sync_seq FROM users WHERE id = ? FOR UPDATE');
+    $seqStmt->execute([$userId]);
+    $seq = (int) $seqStmt->fetchColumn();
+    $nextVersion = static function () use (&$seq): int {
+        return ++$seq;
+    };
+
     // ----------------------------------------------------------------
     // Upsert categories — last-write-wins on updated_at
     // ----------------------------------------------------------------
     $catUpsert = $pdo->prepare('
         INSERT INTO categories
-            (user_id, client_id, name, color, created_at, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (user_id, client_id, name, color, created_at, updated_at, deleted_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             name       = IF(VALUES(updated_at) > updated_at, VALUES(name),       name),
             color      = IF(VALUES(updated_at) > updated_at, VALUES(color),      color),
             deleted_at = IF(VALUES(updated_at) > updated_at, VALUES(deleted_at), deleted_at),
+            version    = IF(VALUES(updated_at) > updated_at, VALUES(version),    version),
             updated_at = IF(VALUES(updated_at) > updated_at, VALUES(updated_at), updated_at)
     ');
 
@@ -91,9 +110,10 @@ try {
             $clientId,
             (string) ($cat['name']  ?? ''),
             (string) ($cat['color'] ?? '#6366f1'),
-            (int) ($cat['created_at'] ?? 0),
-            (int) ($cat['updated_at'] ?? 0),
-            isset($cat['deleted_at']) ? (int) $cat['deleted_at'] : null,
+            $validTs((int) ($cat['created_at'] ?? 0)),
+            $validTs((int) ($cat['updated_at'] ?? 0)),
+            isset($cat['deleted_at']) ? $validTs((int) $cat['deleted_at']) : null,
+            $nextVersion(),
         ]);
 
         $getCatId->execute([$userId, $clientId]);
@@ -119,14 +139,15 @@ try {
     $taskUpsert = $pdo->prepare('
         INSERT INTO tasks
             (user_id, client_id, category_id, title, description, type,
-             is_completed, created_at, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             is_completed, created_at, updated_at, deleted_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             category_id    = IF(VALUES(updated_at) > updated_at, VALUES(category_id),    category_id),
             title          = IF(VALUES(updated_at) > updated_at, VALUES(title),           title),
             description    = IF(VALUES(updated_at) > updated_at, VALUES(description),     description),
             is_completed   = IF(VALUES(updated_at) > updated_at, VALUES(is_completed),    is_completed),
             deleted_at     = IF(VALUES(updated_at) > updated_at, VALUES(deleted_at),      deleted_at),
+            version        = IF(VALUES(updated_at) > updated_at, VALUES(version),         version),
             updated_at     = IF(VALUES(updated_at) > updated_at, VALUES(updated_at),      updated_at)
     ');
 
@@ -165,9 +186,10 @@ try {
             isset($task['description']) ? (string) $task['description'] : null,
             'tracker',
             (int) ($task['is_completed'] ?? 0),
-            (int) ($task['created_at']   ?? 0),
-            (int) ($task['updated_at']   ?? 0),
-            isset($task['deleted_at']) ? (int) $task['deleted_at'] : null,
+            $validTs((int) ($task['created_at'] ?? 0)),
+            $validTs((int) ($task['updated_at'] ?? 0)),
+            isset($task['deleted_at']) ? $validTs((int) $task['deleted_at']) : null,
+            $nextVersion(),
         ]);
 
         $getTaskId->execute([$userId, $clientId]);
@@ -191,14 +213,25 @@ try {
     // Upsert sessions — append-only (sessions are immutable once complete)
     // ----------------------------------------------------------------
 
-    $nowMs = (int) (microtime(true) * 1000);
+    // Closing a session is a change other devices must see, so each closed
+    // row gets its own version.
+    $closeSession = $pdo->prepare(
+        'UPDATE sessions SET ended_at = ?, is_completed = 0, version = ? WHERE id = ?'
+    );
+    $closeOpenSessions = static function (PDOStatement $find, array $params) use (
+        $closeSession, $nextVersion, $nowMs
+    ): void {
+        $find->execute($params);
+        foreach ($find->fetchAll(PDO::FETCH_COLUMN) as $id) {
+            $closeSession->execute([$nowMs, $nextVersion(), (int) $id]);
+        }
+    };
 
     // 1. Auto-close sessions orphaned by a crash: open for > 24 hours.
-    $pdo->prepare('
-        UPDATE sessions
-        SET    ended_at = ?, is_completed = 0
+    $closeOpenSessions($pdo->prepare('
+        SELECT id FROM sessions
         WHERE  user_id = ? AND ended_at IS NULL AND started_at < ?
-    ')->execute([$nowMs, $userId, $nowMs - 86_400_000]);
+    '), [$userId, $nowMs - 86_400_000]);
 
     // 2. If the push contains a currently-open session, close other open sessions
     //    for this user that are NOT in the payload AND are older than 4 hours.
@@ -208,24 +241,24 @@ try {
     if (!empty($openInPayload)) {
         $pushedIds    = array_map(fn($s) => (string) ($s['client_id'] ?? ''), $sessions);
         $ph           = implode(',', array_fill(0, count($pushedIds), '?'));
-        $pdo->prepare("
-            UPDATE sessions
-            SET    ended_at = ?, is_completed = 0
+        $closeOpenSessions($pdo->prepare("
+            SELECT id FROM sessions
             WHERE  user_id = ? AND ended_at IS NULL AND client_id NOT IN ($ph)
               AND  started_at < ?
-        ")->execute([$nowMs, $userId, ...$pushedIds, $nowMs - 14_400_000]); // 4 h
+        "), [$userId, ...$pushedIds, $nowMs - 14_400_000]); // 4 h
     }
 
     $sessionUpsert = $pdo->prepare('
         INSERT INTO sessions
             (user_id, task_id, client_id, type, started_at, ended_at,
-             duration_seconds, is_completed, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             duration_seconds, is_completed, created_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             ended_at         = COALESCE(ended_at, VALUES(ended_at)),
             duration_seconds = GREATEST(duration_seconds, VALUES(duration_seconds)),
             is_completed     = IF(is_completed = 0, VALUES(is_completed), is_completed),
-            created_at       = IF(created_at = 0, VALUES(created_at), created_at)
+            created_at       = IF(created_at = 0, VALUES(created_at), created_at),
+            version          = VALUES(version)
     ');
 
     $getSessionId = $pdo->prepare(
@@ -263,7 +296,6 @@ try {
 
         // Offline sessions have no NTP: started_at will be near epoch 0.
         // Reconstruct timestamps from server time so history is usable.
-        $minValidMs = 946_684_800_000; // 2000-01-01 in ms
         if ($startedAt < $minValidMs) {
             $endedAt   = $nowMs;
             $startedAt = $nowMs - $durationSec * 1000;
@@ -279,6 +311,7 @@ try {
             $durationSec,
             (int) ($session['is_completed'] ?? 0),
             $nowMs,  // always server time: ensures pull.php (created_at > since) finds it
+            $nextVersion(),
         ]);
 
         $getSessionId->execute([$userId, $clientId]);
@@ -291,6 +324,8 @@ try {
             ];
         }
     }
+
+    $pdo->prepare('UPDATE users SET sync_seq = ? WHERE id = ?')->execute([$seq, $userId]);
 
     $pdo->commit();
 
