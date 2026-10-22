@@ -53,7 +53,7 @@ await test('formatHours / formatClock', () => {
     eq(formatHours(3599), '1h 00m', 'rounded');
     eq(formatClock(3725), '1:02:05');
     eq(formatClock(65), '01:05');
-    eq(normalizeBaseUrl(' www.ntako.com/backend/api/ '), 'https://www.ntako.com/backend/api');
+    eq(normalizeBaseUrl(' www.example.com/backend/api/ '), 'https://www.example.com/backend/api');
     eq(normalizeBaseUrl('ftp://x.it'), null);
 });
 

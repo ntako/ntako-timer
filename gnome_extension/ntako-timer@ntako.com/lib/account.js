@@ -3,7 +3,8 @@
 
 import {ApiClient, loadToken, saveToken, clearToken} from './api.js';
 
-export const isLoggedIn = settings => settings.get_string('account-email') !== '';
+export const isLoggedIn = settings =>
+    settings.get_string('account-email') !== '' && settings.get_string('server-url') !== '';
 
 /** Client always pointed at the server currently configured. */
 export function createApi(settings) {

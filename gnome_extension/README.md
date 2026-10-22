@@ -28,7 +28,9 @@ di poterla attivare.
 | Impostazioni, server, email | GSettings `org.gnome.shell.extensions.ntako-timer` |
 | Token di accesso | portachiavi di sistema (libsecret), per server |
 
-Funziona anche senza account; con l'account sincronizza col backend usando
+Funziona anche senza account. Per sincronizzare: pagina Account → Server,
+inserisci l'indirizzo dell'API (es. `https://tuodominio.it/api`), poi accedi.
+Con l'account sincronizza col backend usando
 lo stesso protocollo dell'app (push/pull a cursore, stesse regole di unione).
 A differenza dell'app, anche la pausa è salvata: il tempo in pausa non viene
 mai contato, nemmeno se GNOME Shell si riavvia.

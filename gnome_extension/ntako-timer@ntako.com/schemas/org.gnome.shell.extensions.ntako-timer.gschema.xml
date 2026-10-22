@@ -4,9 +4,9 @@
           path="/org/gnome/shell/extensions/ntako-timer/">
 
     <key name="server-url" type="s">
-      <default>'https://www.ntako.com/backend/api'</default>
+      <default>''</default>
       <summary>Indirizzo del backend</summary>
-      <description>URL dell'API NTAKO, di solito termina con /api.</description>
+      <description>URL dell'API NTAKO, di solito termina con /api. Vuoto finché non lo si imposta: senza, l'estensione funziona solo in locale.</description>
     </key>
 
     <key name="account-email" type="s">

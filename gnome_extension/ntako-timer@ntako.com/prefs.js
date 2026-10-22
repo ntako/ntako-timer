@@ -27,8 +27,6 @@ Gio._promisify(Gtk.FileDialog.prototype, 'save', 'save_finish');
 Gio._promisify(Gtk.FileDialog.prototype, 'open', 'open_finish');
 Gio._promisify(Adw.AlertDialog.prototype, 'choose', 'choose_finish');
 
-const DEFAULT_SERVER = 'https://www.ntako.com/backend/api';
-
 // ── Small helpers ────────────────────────────────────────────────────────────
 
 /** Round dot in a category color. */
@@ -682,11 +680,6 @@ class AccountPage {
         });
         g.add(entry);
         g.add(status);
-        const reset = new Adw.ActionRow({title: 'Server predefinito', subtitle: DEFAULT_SERVER});
-        const resetBtn = new Gtk.Button({label: 'Ripristina', valign: Gtk.Align.CENTER});
-        resetBtn.connect('clicked', () => this._switchServer(DEFAULT_SERVER));
-        reset.add_suffix(resetBtn);
-        g.add(reset);
         return g;
     }
 
@@ -703,8 +696,11 @@ class AccountPage {
     }
 
     _loginGroup() {
+        const hasServer = this.settings.get_string('server-url') !== '';
         const g = new Adw.PreferencesGroup({title: 'Accedi',
-            description: 'Senza account i dati restano solo su questo computer.'});
+            description: hasServer ? 'Senza account i dati restano solo su questo computer.'
+                : 'Per accedere imposta prima l\'indirizzo del server qui sopra. ' +
+                  'Senza account i dati restano solo su questo computer.'});
         const email = new Adw.EntryRow({title: 'Email', input_purpose: Gtk.InputPurpose.EMAIL});
         const password = new Adw.PasswordEntryRow({title: 'Password'});
         g.add(email);
@@ -736,6 +732,7 @@ class AccountPage {
         password.connect('entry-activated', () => run(false));
         buttons.append(reg);
         buttons.append(log);
+        buttons.sensitive = hasServer;
         g.add(buttons);
         return g;
     }
