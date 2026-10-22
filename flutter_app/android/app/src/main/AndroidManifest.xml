@@ -3,8 +3,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Voice commands (speech_to_text) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
-        android:label="ntako_timer"
+        android:label="Workadoro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
@@ -31,6 +33,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Timer commands: ntako://timer/start?task=…, pause, resume, stop.
+                 Opened by the launcher shortcuts and Google Assistant. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ntako" android:host="timer" />
+            </intent-filter>
+            <!-- Links are handled by app_links, not by Flutter's router
+                 (which would navigate to a page named after the link). -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
+            <!-- Launcher shortcuts + App Actions (Google Assistant) -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -62,6 +77,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Speech recognition service used by the voice commands -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 </manifest>

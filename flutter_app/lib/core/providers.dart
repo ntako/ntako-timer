@@ -13,5 +13,10 @@ SecureStorageService secureStorage(SecureStorageRef ref) =>
     SecureStorageService();
 
 @Riverpod(keepAlive: true)
-ApiClient apiClient(ApiClientRef ref) =>
-    ApiClient(ref.watch(secureStorageProvider));
+ApiClient apiClient(ApiClientRef ref) => ApiClient(
+  ref.watch(secureStorageProvider),
+  storedBaseUrl: ref
+      .watch(appDatabaseProvider)
+      .settingsDao
+      .getValue(ApiClient.baseUrlSettingsKey),
+);

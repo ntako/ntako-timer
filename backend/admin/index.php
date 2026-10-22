@@ -10,6 +10,19 @@ header_remove('X-Powered-By');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/export.php';
+require_once __DIR__ . '/import.php';
+require_once __DIR__ . '/report.php';
+
+// Dates on this page (filters, buckets, CSV) are in this timezone.
+if (!@date_default_timezone_set((string) (getenv('APP_TIMEZONE') ?: 'Europe/Rome'))) {
+    date_default_timezone_set('Europe/Rome');
+}
+
+// Token for the state-changing forms of a logged-in admin (import).
+$_SESSION['csrf'] ??= bin2hex(random_bytes(16));
+$csrf  = (string) $_SESSION['csrf'];
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
 
 // No usable ADMIN_PASS → panel disabled, never a default password.
 $adminPass  = configuredSecret('ADMIN_PASS');
@@ -27,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
         exit;
     }
-    if ($adminPass !== null) {
-        if (hash_equals($adminPass, (string) ($_POST['password'] ?? ''))) {
+    if ($adminPass !== null && isset($_POST['password'])) {
+        if (hash_equals($adminPass, (string) $_POST['password'])) {
             $_SESSION['ntako_admin'] = true;
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
             exit;
@@ -88,8 +101,10 @@ $pdo = getDbConnection();
 /** Format seconds → e.g. "3h 42m" or "18m" */
 $fmtTime = static function (int $s): string {
     if ($s <= 0) return '—';
-    $h = intdiv($s, 3600);
-    $m = intdiv($s % 3600, 60);
+    // Rounded to the minute, like the charts and the app's history.
+    $min = (int) round($s / 60);
+    $h   = intdiv($min, 60);
+    $m   = $min % 60;
     return $h > 0 ? sprintf('%dh %02dm', $h, $m) : sprintf('%dm', $m);
 };
 
@@ -97,36 +112,6 @@ $fmtTime = static function (int $s): string {
 $fmtMs = static function (int $ms): string {
     return date('d/m/Y H:i', intdiv($ms, 1000));
 };
-
-/** Returns session stats grouped by category > task for the given time window */
-function getPeriodStats(PDO $pdo, int $uid, int $fromMs, int $toMs): array
-{
-    $stmt = $pdo->prepare('
-        SELECT
-            COALESCE(c.id, 0)                              AS cat_id,
-            COALESCE(c.name, "Senza categoria")            AS cat_name,
-            COALESCE(c.color, "#6b7280")                   AS cat_color,
-            t.id                                           AS task_id,
-            t.title                                        AS task_title,
-            t.is_completed,
-            t.deleted_at,
-            COUNT(s.id)                                    AS session_count,
-            COALESCE(SUM(s.duration_seconds), 0)           AS total_seconds,
-            MIN(s.started_at)                              AS first_ms,
-            MAX(s.started_at)                              AS last_ms
-        FROM sessions s
-        JOIN tasks t   ON t.id = s.task_id
-        LEFT JOIN categories c ON c.id = t.category_id
-        WHERE s.user_id  = :uid
-          AND s.ended_at IS NOT NULL
-          AND s.started_at >= :from_ms
-          AND s.started_at <  :to_ms
-        GROUP BY t.id, c.id
-        ORDER BY cat_name, t.title
-    ');
-    $stmt->execute([':uid' => $uid, ':from_ms' => $fromMs, ':to_ms' => $toMs]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
 
 /** Groups flat rows by category, calculates subtotals + grand total */
 function groupByCategory(array $rows): array
@@ -164,6 +149,41 @@ if ($userId > 0) {
     if (!$user) {
         http_response_code(404);
         echo '<p style="padding:2rem;font-family:sans-serif">Utente non trovato.</p>';
+        exit;
+    }
+
+    // Import a JSON backup into this user's data (POST → redirect → GET).
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import') {
+        $upload = $_FILES['backup'] ?? null;
+        $error  = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+        if (!hash_equals($csrf, (string) ($_POST['csrf'] ?? ''))) {
+            $result = ['ok' => false, 'msg' => 'Sessione scaduta: ricarica la pagina e riprova.'];
+        } elseif ($error !== UPLOAD_ERR_OK) {
+            $result = ['ok' => false, 'msg' => match ($error) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File troppo grande per il server (upload_max_filesize).',
+                UPLOAD_ERR_NO_FILE                        => 'Nessun file selezionato.',
+                default                                   => 'Caricamento del file non riuscito.',
+            }];
+        } else {
+            try {
+                $counts = importBackup($pdo, $userId, (string) file_get_contents($upload['tmp_name']));
+                $line = static fn (string $label, array $c): string =>
+                    "$label: {$c['added']} nuove, {$c['updated']} aggiornate, {$c['unchanged']} già presenti";
+                $result = ['ok' => true, 'msg' => implode("\n", [
+                    'Importazione completata. I dispositivi ricevono i dati al prossimo sync.',
+                    $line('Categorie', $counts['categories']),
+                    $line('Task', $counts['tasks']),
+                    $line('Sessioni', $counts['sessions']),
+                ])];
+            } catch (BackupImportError $e) {
+                $result = ['ok' => false, 'msg' => $e->getMessage()];
+            } catch (Throwable $e) {
+                error_log('admin import failed for user ' . $userId . ': ' . $e);
+                $result = ['ok' => false, 'msg' => 'Importazione non riuscita: dettagli nel log del server.'];
+            }
+        }
+        $_SESSION['flash'] = $result;
+        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?user=' . $userId);
         exit;
     }
 
@@ -221,33 +241,34 @@ if ($userId > 0) {
     $topCat->execute([':uid' => $userId]);
     $topCatRow = $topCat->fetch(PDO::FETCH_ASSOC);
 
-    // Daily sessions breakdown (last 7 days)
-    $dailyBreakdown = $pdo->prepare('
-        SELECT DATE(FROM_UNIXTIME(s.started_at / 1000)) AS day,
-               COUNT(s.id)                              AS sessions,
-               COALESCE(SUM(s.duration_seconds), 0)    AS secs
-        FROM sessions s
-        WHERE s.user_id = :uid
-          AND s.ended_at IS NOT NULL
-          AND s.started_at >= :from_ms
-        GROUP BY day
-        ORDER BY day DESC
-    ');
-    $sevenDaysAgo = (strtotime('-6 days midnight')) * 1000;
-    $dailyBreakdown->execute([':uid' => $userId, ':from_ms' => $sevenDaysAgo]);
-    $dailyRows = $dailyBreakdown->fetchAll(PDO::FETCH_ASSOC);
+    // Filtered report for the charts and the list.
+    $filters  = reportFilters($_GET, $pdo, $userId);
+    $report   = buildReport($pdo, $userId, $filters);
+    $listData = groupByCategory($report['rows']);
 
-    // Period boundaries (unix ms)
-    $todayStart  = strtotime('today midnight') * 1000;
-    $todayEnd    = strtotime('tomorrow midnight') * 1000;
-    $monthStart  = strtotime(date('Y-m-01') . ' midnight') * 1000;
-    $monthEnd    = strtotime(date('Y-m-01', strtotime('+1 month')) . ' midnight') * 1000;
-    $yearStart   = strtotime(date('Y') . '-01-01 midnight') * 1000;
-    $yearEnd     = strtotime((date('Y') + 1) . '-01-01 midnight') * 1000;
+    $stmt = $pdo->prepare('SELECT id, name, deleted_at FROM categories WHERE user_id = ? ORDER BY name');
+    $stmt->execute([$userId]);
+    $catOptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $statsDay   = groupByCategory(getPeriodStats($pdo, $userId, $todayStart, $todayEnd));
-    $statsMonth = groupByCategory(getPeriodStats($pdo, $userId, $monthStart, $monthEnd));
-    $statsYear  = groupByCategory(getPeriodStats($pdo, $userId, $yearStart, $yearEnd));
+    $taskSql = 'SELECT id, title, deleted_at FROM tasks WHERE user_id = ?';
+    $taskArgs = [$userId];
+    if ($filters['cat'] === 'none') {
+        $taskSql .= ' AND category_id IS NULL';
+    } elseif ($filters['cat'] !== '') {
+        $taskSql .= ' AND category_id = ?';
+        $taskArgs[] = (int) $filters['cat'];
+    }
+    $stmt = $pdo->prepare($taskSql . ' ORDER BY title');
+    $stmt->execute($taskArgs);
+    $taskOptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $fmtDay = static fn (DateTimeImmutable $d): string =>
+        $d->format('j') . ' ' . REPORT_MONTHS[(int) $d->format('n') - 1] . ' ' . $d->format('Y');
+    $lastDay   = $filters['to']->modify('-1 day');
+    $rangeText = $filters['from'] == $lastDay
+        ? $fmtDay($lastDay)
+        : $fmtDay($filters['from']) . ' – ' . $fmtDay($lastDay);
+    $groupText = ['day' => 'giorno', 'week' => 'settimana', 'month' => 'mese'][$filters['group']];
 
     // ── render helper ────────────────────────────────────────────────────────
     $renderPeriod = function (array $data) use ($fmtTime, $fmtMs): void {
@@ -418,6 +439,50 @@ if ($userId > 0) {
   .badge-ok  { background: #eafaf1; color: #1e8449; }
   .badge-run { background: #eaf4fe; color: #2471a3; }
   .badge-del { background: #f5f5f5; color: #aaa; }
+
+  /* flash message */
+  .flash { margin: 1rem 1.5rem 0; padding: .75rem 1rem; border-radius: 8px; font-size: .85rem;
+           line-height: 1.5; }
+  .flash.ok  { background: #eafaf1; color: #1e8449; }
+  .flash.err { background: #fdecea; color: #a93226; }
+
+  /* import */
+  .import { position: relative; }
+  .import summary { list-style: none; cursor: pointer; }
+  .import summary::-webkit-details-marker { display: none; }
+  .import-form { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 5; width: 320px;
+                 background: #fff; border-radius: 10px; padding: 1rem;
+                 box-shadow: 0 6px 24px rgba(0,0,0,.15); display: grid; gap: .6rem; }
+  .import-form button { background: #e84545; color: #fff; border: none; border-radius: 7px;
+                        padding: .5rem; font-weight: 600; cursor: pointer; }
+  .import-form .hint { font-size: .75rem; color: #888; line-height: 1.4; }
+
+  /* filters: one row above everything they scope */
+  .filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem .9rem;
+             background: #fff; border-radius: 10px; padding: .8rem 1rem; margin-bottom: .5rem;
+             box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+  .filters label { display: grid; gap: .2rem; font-size: .7rem; font-weight: 700; color: #888;
+                   text-transform: uppercase; letter-spacing: .04em; }
+  .filters select, .filters input { font: inherit; font-size: .85rem; text-transform: none;
+                   letter-spacing: 0; font-weight: 400; color: #222; padding: .4rem .5rem;
+                   border: 1px solid #ddd; border-radius: 6px; background: #fff; min-width: 9rem; }
+  .filters .custom-range { display: flex; gap: .6rem; }
+  .filters .custom-range[hidden] { display: none; }
+  .filters .apply { background: #e84545; color: #fff; border: none; border-radius: 7px;
+                    padding: .5rem 1rem; font-weight: 600; cursor: pointer; }
+  .range-text { font-size: .8rem; color: #888; margin: .2rem 0 .9rem; }
+
+  .period-kpis { padding: 0 0 1rem; }
+  .view-toggle { display: flex; gap: .3rem; margin-bottom: .8rem; }
+
+  /* charts */
+  .chart-card { background: #fff; border-radius: 10px; padding: 1rem 1rem .75rem;
+                box-shadow: 0 1px 6px rgba(0,0,0,.07); margin-bottom: 1rem; }
+  .chart-title { font-size: .8rem; font-weight: 700; color: #555; margin-bottom: .6rem; }
+  .chart-box { position: relative; }
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 1rem;
+                align-items: start; }
+  .chart-fallback { font-size: .8rem; color: #888; }
   .exports { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
   .export { padding: .45rem .8rem; border: 1px solid #e84545; border-radius: 7px;
             color: #e84545; font-size: .8rem; font-weight: 600; text-decoration: none; }
@@ -441,6 +506,10 @@ if ($userId > 0) {
   </div>
 </header>
 
+<?php if ($flash): ?>
+<div class="flash <?= $flash['ok'] ? 'ok' : 'err' ?>"><?= nl2br(htmlspecialchars((string) $flash['msg'])) ?></div>
+<?php endif; ?>
+
 <!-- User card -->
 <div class="ucard">
   <div class="avatar"><?= strtoupper(mb_substr((string) $user['email'], 0, 1)) ?></div>
@@ -454,6 +523,22 @@ if ($userId > 0) {
        title="Backup completo, importabile nell'app">⬇ Backup JSON</a>
     <a class="export" href="?user=<?= (int) $user['id'] ?>&amp;export=csv"
        title="Sessioni completate, per Excel o Fogli">⬇ Sessioni CSV</a>
+    <details class="import">
+      <summary class="export">⬆ Importa backup</summary>
+      <?php $confirmText = json_encode(
+          'Importare il backup nei dati di ' . $user['email'] . '? I dati vengono uniti: niente viene cancellato.',
+          JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE
+      ); ?>
+      <form class="import-form" method="post" enctype="multipart/form-data"
+            onsubmit="return confirm(<?= htmlspecialchars((string) $confirmText, ENT_QUOTES) ?>)">
+        <input type="hidden" name="action" value="import">
+        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <input type="file" name="backup" accept=".json,application/json" required>
+        <button type="submit">Importa</button>
+        <p class="hint">Backup JSON dell'app o di questo pannello. Unisce i dati senza
+          cancellare nulla; i dispositivi dell'utente li ricevono al prossimo sync.</p>
+      </form>
+    </details>
   </div>
 </div>
 
@@ -495,57 +580,246 @@ if ($userId > 0) {
 
 <div class="wrap">
 
-  <!-- 7-day mini bar chart -->
-  <?php if (!empty($dailyRows)):
-      $maxSecs = max(array_column($dailyRows, 'secs')) ?: 1;
-      // Build a map day→data for the last 7 days
-      $dayMap = [];
-      foreach ($dailyRows as $dr) $dayMap[$dr['day']] = $dr;
-  ?>
-  <div class="section-title" style="margin-bottom:.65rem">Ultimi 7 giorni</div>
-  <div class="daybars">
-    <?php for ($i = 6; $i >= 0; $i--):
-        $d   = date('Y-m-d', strtotime("-{$i} days"));
-        $dr  = $dayMap[$d] ?? null;
-        $sec = $dr ? (int) $dr['secs'] : 0;
-        $pct = $maxSecs > 0 ? round($sec / $maxSecs * 44) : 0;
-        $lbl = date('d/m', strtotime($d));
-    ?>
-      <div class="daybar-col">
-        <div class="daybar-val"><?= $sec > 0 ? $fmtTime($sec) : '' ?></div>
-        <div class="daybar-fill" style="height:<?= $pct ?>px"></div>
-        <div class="daybar-lbl"><?= $lbl ?></div>
+  <!-- Filters: one row, scoping everything below -->
+  <form class="filters" id="filters" method="get">
+    <input type="hidden" name="user" value="<?= (int) $userId ?>">
+    <label>Periodo
+      <select name="period">
+        <?php foreach (REPORT_PERIODS as $value => $label): ?>
+          <option value="<?= $value ?>" <?= $filters['period'] === $value ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <span class="custom-range" <?= $filters['period'] === 'custom' ? '' : 'hidden' ?>>
+      <label>Dal <input type="date" name="from" value="<?= $filters['from']->format('Y-m-d') ?>"></label>
+      <label>Al <input type="date" name="to" value="<?= $lastDay->format('Y-m-d') ?>"></label>
+    </span>
+    <label>Categoria
+      <select name="cat">
+        <option value="">Tutte</option>
+        <option value="none" <?= $filters['cat'] === 'none' ? 'selected' : '' ?>>Senza categoria</option>
+        <?php foreach ($catOptions as $c): ?>
+          <option value="<?= (int) $c['id'] ?>" <?= $filters['cat'] === (string) $c['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars((string) $c['name']) ?><?= $c['deleted_at'] !== null ? ' (eliminata)' : '' ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label>Task
+      <select name="task">
+        <option value="0">Tutti</option>
+        <?php foreach ($taskOptions as $t): ?>
+          <option value="<?= (int) $t['id'] ?>" <?= $filters['task'] === (int) $t['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars((string) $t['title'] !== '' ? (string) $t['title'] : '(senza titolo)') ?><?= $t['deleted_at'] !== null ? ' (eliminato)' : '' ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label>Raggruppa per
+      <select name="group">
+        <?php foreach (REPORT_GROUPS as $value => $label): ?>
+          <option value="<?= $value ?>" <?= $filters['groupChoice'] === $value ? 'selected' : '' ?>><?= $label ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <button type="submit" class="apply">Applica</button>
+  </form>
+  <p class="range-text"><?= htmlspecialchars($rangeText) ?> · raggruppato per <?= $groupText ?></p>
+
+  <!-- Period totals -->
+  <div class="summary period-kpis">
+    <div class="kpi">
+      <div class="val"><?= $report['total_seconds'] > 0 ? $fmtTime($report['total_seconds']) : '0m' ?></div>
+      <div class="lbl">Tempo nel periodo</div>
+    </div>
+    <div class="kpi">
+      <div class="val"><?= (int) $report['sessions'] ?></div>
+      <div class="lbl">Sessioni</div>
+    </div>
+    <div class="kpi">
+      <div class="val"><?= (int) $report['active_days'] ?></div>
+      <div class="lbl">Giorni con attività</div>
+    </div>
+    <div class="kpi">
+      <div class="val"><?= $report['active_days'] > 0 ? $fmtTime(intdiv($report['total_seconds'], $report['active_days'])) : '—' ?></div>
+      <div class="lbl">Media per giorno attivo</div>
+    </div>
+  </div>
+
+  <div class="view-toggle">
+    <button type="button" class="tab-btn active" data-view="chart">Grafici</button>
+    <button type="button" class="tab-btn" data-view="list">Lista</button>
+  </div>
+
+  <div id="view-chart" class="tab-panel active">
+    <?php if ($report['sessions'] === 0): ?>
+      <p class="empty">Nessuna sessione con questi filtri.</p>
+    <?php else: ?>
+      <div class="chart-card">
+        <div class="chart-title">Ore per <?= $groupText ?>, per categoria</div>
+        <div class="chart-box" style="height:300px">
+          <canvas id="chart-time" role="img" aria-label="Ore per <?= $groupText ?> suddivise per categoria; i valori sono nella vista Lista"></canvas>
+        </div>
       </div>
-    <?php endfor; ?>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Per categoria</div>
+          <div class="chart-box" style="height:<?= count($report['chart']['categories']) * 32 + 16 ?>px">
+            <canvas id="chart-cats" role="img" aria-label="Ore per categoria"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Task principali</div>
+          <div class="chart-box" style="height:<?= count($report['chart']['tasks']) * 32 + 16 ?>px">
+            <canvas id="chart-tasks" role="img" aria-label="Ore per task"></canvas>
+          </div>
+        </div>
+      </div>
+      <p class="chart-fallback" id="chart-fallback" hidden>Grafici non disponibili (libreria non raggiungibile): usa la vista Lista.</p>
+    <?php endif; ?>
   </div>
-  <?php endif; ?>
 
-  <!-- Period tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('day',this)">
-      Oggi <span style="font-weight:400;opacity:.7"><?= $statsDay['total_sec'] > 0 ? '· ' . $fmtTime($statsDay['total_sec']) : '' ?></span>
-    </button>
-    <button class="tab-btn" onclick="switchTab('month',this)">
-      <?= date('F Y') ?> <span style="font-weight:400;opacity:.7"><?= $statsMonth['total_sec'] > 0 ? '· ' . $fmtTime($statsMonth['total_sec']) : '' ?></span>
-    </button>
-    <button class="tab-btn" onclick="switchTab('year',this)">
-      <?= date('Y') ?> <span style="font-weight:400;opacity:.7"><?= $statsYear['total_sec'] > 0 ? '· ' . $fmtTime($statsYear['total_sec']) : '' ?></span>
-    </button>
-  </div>
-
-  <div id="tab-day"   class="tab-panel active"><?php $renderPeriod($statsDay); ?></div>
-  <div id="tab-month" class="tab-panel"><?php $renderPeriod($statsMonth); ?></div>
-  <div id="tab-year"  class="tab-panel"><?php $renderPeriod($statsYear); ?></div>
+  <div id="view-list" class="tab-panel"><?php $renderPeriod($listData); ?></div>
 
 </div><!-- .wrap -->
 
+<script type="application/json" id="report-data"><?= json_encode(
+    $report['chart'],
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+) ?></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-function switchTab(id, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  btn.classList.add('active');
-}
+(function () {
+  // Filters: a select applies at once; custom dates wait for "Applica".
+  const form = document.getElementById('filters');
+  const range = form.querySelector('.custom-range');
+  form.period.addEventListener('change', () => {
+    if (form.period.value === 'custom') { range.hidden = false; return; }
+    form.submit();
+  });
+  form.cat.addEventListener('change', () => { form.task.value = '0'; form.submit(); });
+  form.task.addEventListener('change', () => form.submit());
+  form.group.addEventListener('change', () => form.submit());
+
+  // Chart / list toggle, remembered in this browser.
+  const show = (view) => {
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    document.getElementById('view-chart').classList.toggle('active', view === 'chart');
+    document.getElementById('view-list').classList.toggle('active', view === 'list');
+    try { localStorage.setItem('ntako-admin-view', view); } catch (e) {}
+  };
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
+  let saved = null;
+  try { saved = localStorage.getItem('ntako-admin-view'); } catch (e) {}
+  if (saved === 'list') show('list');
+
+  const data = JSON.parse(document.getElementById('report-data').textContent);
+  if (!data.categories.length) return;
+  if (typeof Chart === 'undefined') {
+    document.getElementById('chart-fallback').hidden = false;
+    return;
+  }
+
+  const fmt = (secs) => {
+    const min = Math.round(secs / 60), h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+  };
+  const ink = '#555', grid = '#eee', surface = '#fff';
+  Chart.defaults.font.family = 'system-ui, sans-serif';
+  Chart.defaults.color = '#999';
+
+  // Hours per bucket, stacked by category (category color = its identity in the app).
+  // Only the top non-empty segment of a column gets the rounded data-end;
+  // a 2px surface-colored top border separates the stacked segments.
+  const topSeries = data.labels.map((_, i) => {
+    for (let c = data.categories.length - 1; c >= 0; c--) if (data.categories[c].buckets[i] > 0) return c;
+    return -1;
+  });
+  new Chart(document.getElementById('chart-time'), {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: data.categories.map((c, ci) => ({
+        label: c.name,
+        data: c.buckets.map(s => s / 3600),
+        backgroundColor: c.color,
+        borderColor: surface,
+        borderWidth: { top: 2, right: 0, bottom: 0, left: 0 },
+        borderSkipped: false,
+        borderRadius: ctx => topSeries[ctx.dataIndex] === ci ? { topLeft: 4, topRight: 4 } : 0,
+        maxBarThickness: 24,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+        y: { stacked: true, beginAtZero: true, grid: { color: grid }, border: { display: false },
+             ticks: { callback: v => v + ' h' } },
+      },
+      plugins: {
+        legend: { position: 'top', align: 'start', labels: { boxWidth: 12, boxHeight: 12, color: ink } },
+        tooltip: {
+          filter: item => item.raw > 0,
+          itemSort: (a, b) => b.raw - a.raw,
+          callbacks: {
+            label: item => ` ${fmt(item.raw * 3600)}  ${item.dataset.label}`,
+            footer: items => 'Totale ' + fmt(items.reduce((sum, i) => sum + i.raw * 3600, 0)),
+          },
+        },
+      },
+    },
+  });
+
+  // Horizontal bars with the value at the tip.
+  const valueLabels = {
+    id: 'valueLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      ctx.save();
+      ctx.fillStyle = ink;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      chart.getDatasetMeta(0).data.forEach((bar, i) =>
+        ctx.fillText(fmt(chart.data.datasets[0].data[i] * 3600), bar.x + 6, bar.y));
+      ctx.restore();
+    },
+  };
+  const shorten = (label) => label.length > 30 ? label.slice(0, 29) + '…' : label;
+  const hbar = (id, items, title) => new Chart(document.getElementById(id), {
+    type: 'bar',
+    plugins: [valueLabels],
+    data: {
+      labels: items.map(i => i.name),
+      datasets: [{
+        data: items.map(i => i.seconds / 3600),
+        backgroundColor: items.map(i => i.color),
+        borderRadius: 4,
+        borderSkipped: 'start',
+        maxBarThickness: 20,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      layout: { padding: { right: 64 } },
+      scales: {
+        x: { display: false, beginAtZero: true },
+        y: { grid: { display: false }, border: { display: false },
+             ticks: { color: ink, callback(v) { return shorten(this.getLabelForValue(v)); } } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { title, label: item => ' ' + fmt(item.raw * 3600) } },
+      },
+    },
+  });
+  hbar('chart-cats', [...data.categories].sort((a, b) => b.seconds - a.seconds),
+       items => items[0].label);
+  hbar('chart-tasks', data.tasks, items => {
+    const t = data.tasks[items[0].dataIndex];
+    return t.category ? `${t.name} · ${t.category}` : t.name;
+  });
+})();
 </script>
 </body>
 </html>

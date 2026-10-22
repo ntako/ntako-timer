@@ -8,6 +8,9 @@
 
 static char _baseUrl[128] = "";
 
+// Shown when the server rejects the token (expired, or JWT secret changed).
+static const char* LOGIN_EXPIRED = "Login scaduto: rifai l'accesso";
+
 void Api::init(const char* baseUrl) {
     strlcpy(_baseUrl, baseUrl, sizeof(_baseUrl));
 }
@@ -44,6 +47,7 @@ static bool doPost(const char* path, const String& body, const char* token,
     http.end();
 
     DeserializationError err = deserializeJson(out, respBody);
+    if (code == 401) { snprintf(outErr, errSize, "%s", LOGIN_EXPIRED); return false; }
     if (err) { snprintf(outErr, errSize, "HTTP%d %.16s", code, respBody.c_str()); return false; }
     if (code >= 400) {
         snprintf(outErr, errSize, "%s (%d)",
@@ -53,9 +57,15 @@ static bool doPost(const char* path, const String& body, const char* token,
     return true;
 }
 
+// With a filter, only the fields it lists are kept: the body is parsed
+// straight from the stream, so fields the device doesn't use (long task
+// descriptions, deleted rows' details…) never take RAM.
 static bool doGet(const char* path, const char* token,
-                  JsonDocument& out, char* outErr, size_t errSize) {
+                  JsonDocument& out, char* outErr, size_t errSize,
+                  const JsonDocument* filter = nullptr) {
     HTTPClient http;
+    // HTTP/1.0: no chunked transfer encoding, so the stream is plain JSON.
+    http.useHTTP10(true);
     httpBegin(http, String(_baseUrl) + path);
     if (token && strlen(token) > 0)
         http.addHeader("Authorization", String("Bearer ") + token);
@@ -68,11 +78,13 @@ static bool doGet(const char* path, const char* token,
         return false;
     }
 
-    String respBody = http.getString();
+    DeserializationError err = filter
+        ? deserializeJson(out, http.getStream(), DeserializationOption::Filter(*filter))
+        : deserializeJson(out, http.getStream());
     http.end();
 
-    DeserializationError err = deserializeJson(out, respBody);
-    if (err) { snprintf(outErr, errSize, "JSON err: %.20s", respBody.c_str()); return false; }
+    if (code == 401) { snprintf(outErr, errSize, "%s", LOGIN_EXPIRED); return false; }
+    if (err) { snprintf(outErr, errSize, "HTTP%d JSON: %s", code, err.c_str()); return false; }
     if (code >= 400) {
         snprintf(outErr, errSize, "%s (%d)",
                  out["error"] | "Server error", code);
@@ -124,13 +136,30 @@ bool Api::registerUser(const char* email, const char* password,
 int Api::pull(const char* token, int64_t since,
               Category* cats, int maxCats, int& catCount,
               Task* tasks, int maxTasks, int64_t& serverTime,
-              SessionEntry* sessions, int maxSessions, int* sessionCount) {
+              SessionEntry* sessions, int maxSessions, int* sessionCount,
+              char* outErr, size_t errSize) {
     char path[48];
     snprintf(path, sizeof(path), "/sync/pull?since=%lld", since);
 
+    // Only the fields read below.
+    JsonDocument filter;
+    filter["server_time"] = true;
+    filter["error"]       = true;
+    for (const char* k : {"client_id", "id", "name", "color", "deleted_at"})
+        filter["categories"][0][k] = true;
+    for (const char* k : {"client_id", "category_client_id", "id", "title",
+                          "is_completed", "updated_at", "created_at", "deleted_at"})
+        filter["tasks"][0][k] = true;
+    for (const char* k : {"client_id", "task_client_id", "duration_seconds",
+                          "started_at", "ended_at"})
+        filter["sessions"][0][k] = true;
+
     char err[64];
     JsonDocument resp;
-    if (!doGet(path, token, resp, err, sizeof(err))) return -1;
+    if (!doGet(path, token, resp, err, sizeof(err), &filter)) {
+        if (outErr && errSize > 0) strlcpy(outErr, err, errSize);
+        return -1;
+    }
 
     serverTime = resp["server_time"] | (int64_t)0;
 
@@ -247,7 +276,11 @@ bool Api::pushTask(const char* token, Task& task, char* outErr, size_t errSize, 
     JsonObject t    = tasks.add<JsonObject>();
     t["client_id"]            = task.id;
     t["category_client_id"]   = strlen(task.category_id) > 0 ? task.category_id : nullptr;
-    t["title"]                = task.title;
+    // Title only while the server doesn't know the task yet: on the device it
+    // can't be renamed and is cut to MAX_TITLE_LEN - 1 chars, so resending it
+    // would truncate a longer title set elsewhere. The description is never
+    // sent (the device doesn't hold it): the server keeps fields not sent.
+    if (task.server_id == 0) t["title"] = task.title;
     t["type"]                 = "tracker";
     t["is_completed"]         = task.is_completed ? 1 : 0;
     t["created_at"]           = task.created_at;
@@ -291,9 +324,11 @@ bool Api::pushSession(const char* token,
     s["task_client_id"]   = taskClientId;
     s["type"]             = type;
     s["started_at"]       = startedAt;
-    s["ended_at"]         = endedAt;
+    // endedAt 0 = still running: pushed open so the other clients show it.
+    if (endedAt > 0) s["ended_at"] = endedAt;
+    else             s["ended_at"] = nullptr;
     s["duration_seconds"] = durationSec;
-    s["is_completed"]     = 1;
+    s["is_completed"]     = endedAt > 0 ? 1 : 0;
     s["created_at"]       = startedAt;
 
     String bodyStr;

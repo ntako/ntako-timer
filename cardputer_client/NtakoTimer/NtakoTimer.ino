@@ -251,6 +251,7 @@ static Category     _incomingCats[MAX_CATEGORIES];
 static Task         _incoming[MAX_TASKS];
 static SessionEntry _incomingSessions[MAX_SESSION_LOG];
 static SessionEntry _localOnly[MAX_SESSION_LOG];
+static char         _pullErr[52] = "";  // why the last pull failed, for the message
 
 static bool pullFromServer(bool /*forceFull*/ = false) {
     if (strlen(jwtToken) == 0) return false;
@@ -260,10 +261,12 @@ static bool pullFromServer(bool /*forceFull*/ = false) {
     int     inCatCount = 0;
     int     sesCount   = 0;
 
+    _pullErr[0] = '\0';
     int n = Api::pull(jwtToken, since,
                       _incomingCats, MAX_CATEGORIES, inCatCount,
                       _incoming, MAX_TASKS, serverTime,
-                      _incomingSessions, MAX_SESSION_LOG, &sesCount);
+                      _incomingSessions, MAX_SESSION_LOG, &sesCount,
+                      _pullErr, sizeof(_pullErr));
     if (n < 0) return false;
 
     // ── Merge categories ──
@@ -473,6 +476,8 @@ static void doSync() {
         snprintf(msg, sizeof(msg), "Err: %.58s", firstErr);
     else if (pushFail > 0)
         snprintf(msg, sizeof(msg), "Sync: %d ok, %d failed!", pushOk, pushFail);
+    else if (!pulled && _pullErr[0] != '\0')
+        snprintf(msg, sizeof(msg), "Pull: %.56s", _pullErr);
     else if (!pulled)
         strlcpy(msg, "Pull failed — check server", sizeof(msg));
     else
@@ -513,6 +518,19 @@ static void startTimer(int taskIdx) {
     pauseNagSec       = 0;
     Timer::startCountUp();
     appState = ST_TIMER_RUNNING;
+
+    // Tell the other clients a timer is running here. Only when already
+    // online and with real time (NTP): the stop pushes the session anyway.
+    if (WiFi.status() == WL_CONNECTED && strlen(jwtToken) > 0
+        && sessionStartedAt > 946684800000LL /* 2000-01-01 */) {
+        bool hasTask = taskIdx >= 0 && taskIdx < taskCount;
+        // The session must find its task on the server: an unsynced task
+        // would leave it without one for good.
+        if (hasTask && tasks[taskIdx].needs_push)
+            Api::pushTask(jwtToken, tasks[taskIdx]);
+        Api::pushSession(jwtToken, activeSessionId, hasTask ? tasks[taskIdx].id : "",
+                         "tracking", sessionStartedAt, 0, 0);
+    }
 }
 
 static void beepDone() {
@@ -951,6 +969,8 @@ static void onKeyTaskAction(Keyboard_Class::KeysState& ks) {
     for (char c : ks.word) {
         if (c == 'd' || c == 'D') {
             tasks[selectedTask].is_completed = true;
+            // Newer than the server copy, or the server ignores the change.
+            tasks[selectedTask].updated_at   = nowMs();
             tasks[selectedTask].needs_push   = true;
             if (strlen(jwtToken) > 0)
                 Api::pushTask(jwtToken, tasks[selectedTask]);
@@ -961,6 +981,7 @@ static void onKeyTaskAction(Keyboard_Class::KeysState& ks) {
         }
         if (c == 'r' || c == 'R') {
             tasks[selectedTask].is_completed = false;
+            tasks[selectedTask].updated_at   = nowMs();
             tasks[selectedTask].needs_push   = true;
             if (strlen(jwtToken) > 0)
                 Api::pushTask(jwtToken, tasks[selectedTask]);

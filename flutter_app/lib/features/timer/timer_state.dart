@@ -31,11 +31,11 @@ class TimerState {
   });
 
   factory TimerState.initial({String? currentTaskId}) => TimerState(
-        status: TimerStatus.idle,
-        elapsedSeconds: 0,
-        currentTaskId: currentTaskId,
-        pauseBreakRemainingSeconds: 0,
-      );
+    status: TimerStatus.idle,
+    elapsedSeconds: 0,
+    currentTaskId: currentTaskId,
+    pauseBreakRemainingSeconds: 0,
+  );
 
   TimerState copyWith({
     TimerStatus? status,
@@ -48,20 +48,20 @@ class TimerState {
     bool clearActiveSessionId = false,
     int? pauseBreakRemainingSeconds,
     bool clearPauseBreak = false,
-  }) =>
-      TimerState(
-        status: status ?? this.status,
-        elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
-        trackingStartTime: clearTrackingStartTime
-            ? null
-            : (trackingStartTime ?? this.trackingStartTime),
-        currentTaskId:
-            clearCurrentTaskId ? null : (currentTaskId ?? this.currentTaskId),
-        activeSessionId: clearActiveSessionId
-            ? null
-            : (activeSessionId ?? this.activeSessionId),
-        pauseBreakRemainingSeconds: clearPauseBreak
-            ? 0
-            : (pauseBreakRemainingSeconds ?? this.pauseBreakRemainingSeconds),
-      );
+  }) => TimerState(
+    status: status ?? this.status,
+    elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
+    trackingStartTime: clearTrackingStartTime
+        ? null
+        : (trackingStartTime ?? this.trackingStartTime),
+    currentTaskId: clearCurrentTaskId
+        ? null
+        : (currentTaskId ?? this.currentTaskId),
+    activeSessionId: clearActiveSessionId
+        ? null
+        : (activeSessionId ?? this.activeSessionId),
+    pauseBreakRemainingSeconds: clearPauseBreak
+        ? 0
+        : (pauseBreakRemainingSeconds ?? this.pauseBreakRemainingSeconds),
+  );
 }

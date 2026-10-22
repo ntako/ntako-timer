@@ -1,5 +1,6 @@
 -- NTAKO_TIMER Database Schema
 -- Compatible with MySQL 5.7+ and MySQL 8.0
+-- utf8mb4 explicitly: MySQL 5.7 defaults to latin1, which rejects "→", emoji…
 
 CREATE TABLE IF NOT EXISTS users (
   id            INT PRIMARY KEY AUTO_INCREMENT,
@@ -7,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   sync_seq      BIGINT NOT NULL DEFAULT 0 COMMENT 'last version handed out to this user''s rows',
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS categories (
   id         INT PRIMARY KEY AUTO_INCREMENT,
@@ -22,7 +23,7 @@ CREATE TABLE IF NOT EXISTS categories (
   KEY idx_categories_user_version (user_id, version),
   CONSTRAINT fk_categories_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   UNIQUE KEY uq_user_client_cat (user_id, client_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id           INT PRIMARY KEY AUTO_INCREMENT,
@@ -41,7 +42,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   CONSTRAINT fk_tasks_user     FOREIGN KEY (user_id)     REFERENCES users(id)      ON DELETE CASCADE,
   CONSTRAINT fk_tasks_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   UNIQUE KEY uq_user_client_task (user_id, client_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id               INT PRIMARY KEY AUTO_INCREMENT,
@@ -59,4 +60,4 @@ CREATE TABLE IF NOT EXISTS sessions (
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_sessions_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
   UNIQUE KEY uq_user_client_session (user_id, client_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

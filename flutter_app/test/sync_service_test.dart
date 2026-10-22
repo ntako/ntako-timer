@@ -16,6 +16,18 @@ class FakeApi implements ApiClient {
   Future<void> Function()? duringPush;
 
   @override
+  String get baseUrl => 'http://fake';
+
+  @override
+  Future<String> get effectiveBaseUrl async => baseUrl;
+
+  @override
+  bool get usesDefaultBaseUrl => true;
+
+  @override
+  void setBaseUrl(String? url) {}
+
+  @override
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> data,

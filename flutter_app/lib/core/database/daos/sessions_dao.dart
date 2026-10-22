@@ -75,6 +75,21 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
         ),
       );
 
+  /// Watch sessions not ended yet: this device's running timer plus those
+  /// of other devices, received by sync.
+  Stream<List<Session>> watchOpenSessions() =>
+      (select(sessions)..where((s) => s.endedAt.isNull())).watch();
+
+  Future<List<Session>> getOpenSessions() =>
+      (select(sessions)..where((s) => s.endedAt.isNull())).get();
+
+  /// Watch one session (null if missing).
+  Stream<Session?> watchSession(String id) =>
+      (select(sessions)..where((s) => s.id.equals(id))).watchSingleOrNull();
+
+  /// Watch every session (history report filters them in memory).
+  Stream<List<Session>> watchAllSessions() => select(sessions).watch();
+
   /// Watch the most recent sessions (all statuses), newest first.
   Stream<List<Session>> watchRecentSessions({int limit = 100}) =>
       (select(sessions)

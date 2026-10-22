@@ -1,0 +1,15 @@
+{
+  "name": "NTAKO Timer",
+  "description": "Time tracker con task, categorie, storico e sincronizzazione con il backend NTAKO. Il timer sta nella barra in alto; task, storico e account nella finestra delle preferenze.",
+  "uuid": "ntako-timer@ntako.com",
+  "settings-schema": "org.gnome.shell.extensions.ntako-timer",
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "url": "https://www.ntako.com",
+  "version-name": "1.0"
+}

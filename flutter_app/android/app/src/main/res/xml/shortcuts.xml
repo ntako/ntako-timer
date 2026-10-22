@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcuts (long press on the icon) and App Actions for Google
+     Assistant. Everything opens an ntako://timer/… link, handled in Dart by
+     lib/features/voice/timer_command_handler.dart.
+
+     App Actions custom intents only work in en-US (device and Assistant
+     language), and only once the app is uploaded to Play Console. -->
+<shortcuts
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- "Hey Google, start tracking Arundo on Workadoro" -->
+    <capability
+        android:name="custom.actions.intent.START_NTAKO_TIMER"
+        app:queryPatterns="@array/StartTimerQueries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity">
+            <url-template android:value="ntako://timer/start{?task}" />
+            <parameter
+                android:name="task"
+                android:key="task"
+                android:mimeType="https://schema.org/Text"
+                android:required="true" />
+        </intent>
+        <!-- No task named: starts on the task selected in the app. -->
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity">
+            <url-template android:value="ntako://timer/start" />
+        </intent>
+    </capability>
+
+    <capability
+        android:name="custom.actions.intent.PAUSE_NTAKO_TIMER"
+        app:queryPatterns="@array/PauseTimerQueries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity">
+            <url-template android:value="ntako://timer/pause" />
+        </intent>
+    </capability>
+
+    <capability
+        android:name="custom.actions.intent.RESUME_NTAKO_TIMER"
+        app:queryPatterns="@array/ResumeTimerQueries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity">
+            <url-template android:value="ntako://timer/resume" />
+        </intent>
+    </capability>
+
+    <capability
+        android:name="custom.actions.intent.STOP_NTAKO_TIMER"
+        app:queryPatterns="@array/StopTimerQueries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity">
+            <url-template android:value="ntako://timer/stop" />
+        </intent>
+    </capability>
+
+    <!-- Launcher shortcuts -->
+    <shortcut
+        android:shortcutId="timer_start"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_start_short"
+        android:shortcutLongLabel="@string/shortcut_start_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity"
+            android:data="ntako://timer/start" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="timer_pause"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_pause_short"
+        android:shortcutLongLabel="@string/shortcut_pause_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity"
+            android:data="ntako://timer/pause" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="timer_stop"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_stop_short"
+        android:shortcutLongLabel="@string/shortcut_stop_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ntako.ntako_timer"
+            android:targetClass="com.ntako.ntako_timer.MainActivity"
+            android:data="ntako://timer/stop" />
+    </shortcut>
+</shortcuts>

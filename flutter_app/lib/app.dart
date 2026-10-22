@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'features/auth/login_screen.dart';
@@ -8,8 +10,12 @@ import 'features/history/history_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/tasks/tasks_screen.dart';
 import 'features/timer/app_lifecycle_observer.dart';
+import 'features/timer/remote_sessions.dart';
 import 'features/timer/timer_notifier.dart';
 import 'features/timer/timer_screen.dart';
+import 'core/messenger.dart';
+import 'features/voice/assistant_open.dart';
+import 'features/voice/timer_command_handler.dart';
 
 class NtakoTimerApp extends ConsumerWidget {
   const NtakoTimerApp({super.key});
@@ -18,6 +24,11 @@ class NtakoTimerApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'NTAKO Timer',
+      scaffoldMessengerKey: rootMessengerKey,
+      // The UI is Italian: date pickers and formatted dates follow it.
+      locale: const Locale('it'),
+      supportedLocales: const [Locale('it')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFE84545),
@@ -88,20 +99,42 @@ class _MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<_MainShell>
     with WidgetsBindingObserver {
   late final AppLifecycleObserver _lifecycleObserver;
+  StreamSubscription<Uri>? _links;
+
+  /// While the app is in the foreground, timers started or stopped on other
+  /// devices show up within this delay. Nothing runs in the background.
+  static const _livePoll = Duration(seconds: 30);
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _lifecycleObserver = AppLifecycleObserver(ref);
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(timerNotifierProvider.notifier).recoverDanglingSession();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(timerNotifierProvider.notifier).recoverDanglingSession();
+      // Only now: a "start" link must see a recovered session, or it would
+      // open a second one.
+      if (!mounted) return;
+      _links = ref.read(timerCommandHandlerProvider).listenToLinks();
+      await AssistantOpen.listen(() {
+        if (!mounted) return;
+        context.go('/timer');
+        ref.read(voiceListenRequestedProvider.notifier).state = true;
+      });
+    });
+    _poll = Timer.periodic(_livePoll, (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        syncIfLoggedIn(ref.read);
+      }
     });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    _links?.cancel();
+    _poll?.cancel();
     super.dispose();
   }
 

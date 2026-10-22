@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
+import '../../core/messenger.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/providers.dart';
 import '../settings/settings_notifier.dart';
+import 'remote_sessions.dart';
 import 'timer_state.dart';
 
 part 'timer_notifier.g.dart';
@@ -23,6 +25,10 @@ const activeSessionSettingsKey = 'active_session_id';
 class TimerNotifier extends _$TimerNotifier {
   Timer? _ticker;
   Timer? _breakTicker;
+
+  /// Watches the running session: another device may stop it (the sync
+  /// then brings it back closed).
+  StreamSubscription<Session?>? _activeWatch;
   bool _sessionDurationFired = false;
 
   @override
@@ -39,8 +45,9 @@ class TimerNotifier extends _$TimerNotifier {
   void onAppResume() {
     if (state.status != TimerStatus.running) return;
     if (state.trackingStartTime == null) return;
-    final elapsed =
-        DateTime.now().difference(state.trackingStartTime!).inSeconds;
+    final elapsed = DateTime.now()
+        .difference(state.trackingStartTime!)
+        .inSeconds;
     state = state.copyWith(elapsedSeconds: elapsed);
     _startTicker();
   }
@@ -85,7 +92,10 @@ class TimerNotifier extends _$TimerNotifier {
     );
 
     _startTicker();
+    _watchActive(sessionId);
     await _showOngoing();
+    // Other devices see the running timer as soon as possible.
+    syncIfLoggedIn(ref.read);
   }
 
   void pause() {
@@ -93,8 +103,8 @@ class TimerNotifier extends _$TimerNotifier {
     _ticker?.cancel();
     NotificationService.cancel(_ongoingNotificationId);
 
-    final settings = ref.read(settingsNotifierProvider).valueOrNull ??
-        const AppSettings();
+    final settings =
+        ref.read(settingsNotifierProvider).valueOrNull ?? const AppSettings();
     final breakSec = settings.breakDurationMinutes * 60;
 
     state = state.copyWith(
@@ -111,11 +121,11 @@ class TimerNotifier extends _$TimerNotifier {
           _breakTicker?.cancel();
           _breakTicker = null;
           state = state.copyWith(clearPauseBreak: true);
-          final vol = ref.read(settingsNotifierProvider).valueOrNull?.alarmVolume ?? 8;
+          final vol =
+              ref.read(settingsNotifierProvider).valueOrNull?.alarmVolume ?? 8;
           _showBreakEndNotification(vol > 0);
         } else {
-          state = state.copyWith(
-              pauseBreakRemainingSeconds: remaining - 1);
+          state = state.copyWith(pauseBreakRemainingSeconds: remaining - 1);
         }
       });
     }
@@ -126,8 +136,9 @@ class TimerNotifier extends _$TimerNotifier {
     _breakTicker?.cancel();
     _breakTicker = null;
 
-    final startTime =
-        DateTime.now().subtract(Duration(seconds: state.elapsedSeconds));
+    final startTime = DateTime.now().subtract(
+      Duration(seconds: state.elapsedSeconds),
+    );
     state = state.copyWith(
       status: TimerStatus.running,
       trackingStartTime: startTime,
@@ -153,8 +164,7 @@ class TimerNotifier extends _$TimerNotifier {
     }
 
     _sessionDurationFired = false;
-    final startTime =
-        DateTime.fromMillisecondsSinceEpoch(dangling.startedAt);
+    final startTime = DateTime.fromMillisecondsSinceEpoch(dangling.startedAt);
     final elapsed = DateTime.now().difference(startTime).inSeconds;
 
     state = state.copyWith(
@@ -166,10 +176,14 @@ class TimerNotifier extends _$TimerNotifier {
     );
 
     _startTicker();
+    _watchActive(dangling.id);
     await _showOngoing();
   }
 
   Future<void> stop() async {
+    // Closing it here must not look like a stop from another device.
+    await _activeWatch?.cancel();
+    _activeWatch = null;
     _ticker?.cancel();
     _breakTicker?.cancel();
     _breakTicker = null;
@@ -186,26 +200,59 @@ class TimerNotifier extends _$TimerNotifier {
     }
 
     state = TimerState.initial(currentTaskId: state.currentTaskId);
+    syncIfLoggedIn(ref.read);
   }
 
   // ----------------------------------------------------------------
   // Internal
+
+  void _watchActive(String sessionId) {
+    _activeWatch?.cancel();
+    _activeWatch = ref
+        .read(appDatabaseProvider)
+        .sessionsDao
+        .watchSession(sessionId)
+        .listen((s) {
+          if (s?.endedAt != null && state.activeSessionId == sessionId) {
+            _stoppedElsewhere();
+          }
+        });
+  }
+
+  /// The running session came back closed by sync: another device stopped
+  /// it. The session is already saved; only the local timer is reset.
+  Future<void> _stoppedElsewhere() async {
+    await _activeWatch?.cancel();
+    _activeWatch = null;
+    _ticker?.cancel();
+    _breakTicker?.cancel();
+    _breakTicker = null;
+    NotificationService.cancel(_ongoingNotificationId);
+    await ref
+        .read(appDatabaseProvider)
+        .settingsDao
+        .deleteValue(activeSessionSettingsKey);
+    state = TimerState.initial(currentTaskId: state.currentTaskId);
+    showRootMessage('Il timer è stato fermato da un altro dispositivo');
+  }
   // ----------------------------------------------------------------
 
   void _startTicker() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (state.trackingStartTime == null) return;
-      final elapsed =
-          DateTime.now().difference(state.trackingStartTime!).inSeconds;
+      final elapsed = DateTime.now()
+          .difference(state.trackingStartTime!)
+          .inSeconds;
       state = state.copyWith(elapsedSeconds: elapsed);
 
-      final settings = ref.read(settingsNotifierProvider).valueOrNull ??
-          const AppSettings();
+      final settings =
+          ref.read(settingsNotifierProvider).valueOrNull ?? const AppSettings();
 
       // One-shot session duration notification
       final sessionMin = settings.sessionDurationMinutes;
-      if (sessionMin > 0 && !_sessionDurationFired &&
+      if (sessionMin > 0 &&
+          !_sessionDurationFired &&
           elapsed >= sessionMin * 60) {
         _sessionDurationFired = true;
         _showSessionDurationNotification(sessionMin, settings.alarmVolume > 0);

@@ -16,6 +16,9 @@ class CategoriesDao extends DatabaseAccessor<AppDatabase>
             ..orderBy([(c) => OrderingTerm.asc(c.name)]))
           .watch();
 
+  /// Watch all categories, deleted ones included (history still names them).
+  Stream<List<Category>> watchAllCategories() => select(categories).watch();
+
   Future<Category?> getCategoryById(String id) =>
       (select(categories)..where((c) => c.id.equals(id))).getSingleOrNull();
 

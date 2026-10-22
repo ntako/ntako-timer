@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.ntako-timer"
+          path="/org/gnome/shell/extensions/ntako-timer/">
+
+    <key name="server-url" type="s">
+      <default>'https://www.ntako.com/backend/api'</default>
+      <summary>Indirizzo del backend</summary>
+      <description>URL dell'API NTAKO, di solito termina con /api.</description>
+    </key>
+
+    <key name="account-email" type="s">
+      <default>''</default>
+      <summary>Email dell'account collegato</summary>
+      <description>Vuota quando non si è collegati. Il token è nel portachiavi di sistema.</description>
+    </key>
+
+    <key name="session-alert-minutes" type="i">
+      <range min="0" max="240"/>
+      <default>120</default>
+      <summary>Avviso dopo questi minuti di sessione (0 = mai)</summary>
+    </key>
+
+    <key name="break-minutes" type="i">
+      <range min="0" max="60"/>
+      <default>15</default>
+      <summary>Durata della pausa con promemoria (0 = nessun promemoria)</summary>
+    </key>
+
+    <key name="alert-sound" type="b">
+      <default>true</default>
+      <summary>Suono con gli avvisi</summary>
+    </key>
+
+    <key name="show-time-in-panel" type="b">
+      <default>true</default>
+      <summary>Mostra il tempo nella barra in alto</summary>
+    </key>
+
+    <key name="sync-interval-minutes" type="i">
+      <range min="1" max="120"/>
+      <default>1</default>
+      <summary>Ogni quanti minuti sincronizzare</summary>
+      <description>Mentre un timer è aperto (qui o su un altro dispositivo) la sincronizzazione avviene ogni 30 secondi.</description>
+    </key>
+  </schema>
+</schemalist>

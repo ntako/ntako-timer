@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher shortcuts (res/xml/shortcuts.xml) -->
+    <string name="shortcut_start_short">Avvia</string>
+    <string name="shortcut_start_long">Avvia il timer</string>
+    <string name="shortcut_pause_short">Pausa</string>
+    <string name="shortcut_pause_long">Metti in pausa il timer</string>
+    <string name="shortcut_stop_short">Ferma</string>
+    <string name="shortcut_stop_long">Ferma e salva la sessione</string>
+
+    <!-- App Actions query patterns: Google supports custom intents only in
+         en-US. Users say them after "Hey Google," and before
+         "on/in Workadoro". -->
+    <string-array name="StartTimerQueries">
+        <item>start tracking $task</item>
+        <item>start the timer for $task</item>
+        <item>start the timer on $task</item>
+        <item>start a session on $task</item>
+        <item>start working on $task</item>
+        <item>track $task</item>
+        <item>start the timer</item>
+        <item>start tracking</item>
+    </string-array>
+    <string-array name="PauseTimerQueries">
+        <item>pause the timer</item>
+        <item>pause tracking</item>
+        <item>take a break</item>
+    </string-array>
+    <string-array name="ResumeTimerQueries">
+        <item>resume the timer</item>
+        <item>resume tracking</item>
+        <item>continue tracking</item>
+    </string-array>
+    <string-array name="StopTimerQueries">
+        <item>stop the timer</item>
+        <item>stop tracking</item>
+        <item>end the session</item>
+        <item>finish tracking</item>
+    </string-array>
+</resources>

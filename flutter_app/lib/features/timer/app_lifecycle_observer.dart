@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'remote_sessions.dart';
 import 'timer_notifier.dart';
 
 /// Attach to WidgetsBinding to recalculate remaining timer duration
@@ -13,6 +14,8 @@ class AppLifecycleObserver extends WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(timerNotifierProvider.notifier).onAppResume();
+      // Catch up with timers started or stopped elsewhere meanwhile.
+      syncIfLoggedIn(ref.read);
     }
   }
 }

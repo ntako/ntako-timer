@@ -35,6 +35,9 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .watch();
 
+  /// Watch all tasks, deleted ones included (history still names them).
+  Stream<List<Task>> watchAllTasks() => select(tasks).watch();
+
   Future<Task?> getTaskById(String id) =>
       (select(tasks)..where((t) => t.id.equals(id))).getSingleOrNull();
 

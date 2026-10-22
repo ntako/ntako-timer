@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/providers.dart';
 import 'auth_notifier.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -95,6 +96,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             TextButton(
               onPressed: () => context.go('/register'),
               child: const Text('Non hai un account? Registrati'),
+            ),
+            const Spacer(),
+            // Which build is installed and which server it talks to: the first
+            // thing to check when login misbehaves on a device.
+            FutureBuilder<String>(
+              future: ref.read(apiClientProvider).effectiveBaseUrl,
+              builder: (context, snap) => Text(
+                'Build ${const String.fromEnvironment('BUILD_STAMP', defaultValue: 'dev')}'
+                ' · ${snap.data ?? '…'}\n'
+                'Il server si cambia in Impostazioni → Server',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),

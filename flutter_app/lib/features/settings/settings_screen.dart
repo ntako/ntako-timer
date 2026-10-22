@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../auth/auth_notifier.dart';
 import '../backup/backup_section.dart';
 import '../sync/sync_service.dart';
+import 'server_tile.dart';
 import 'settings_notifier.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -107,6 +108,7 @@ class SettingsScreen extends ConsumerWidget {
           const BackupSection(),
           const SizedBox(height: 16),
           const _SectionHeader('Account & Sync'),
+          const ServerTile(),
           if (isLoggedIn) ...[
             ListTile(
               leading: const Icon(Icons.person),

@@ -24,7 +24,8 @@ namespace Api {
              Category* cats, int maxCats, int& catCount,
              Task* tasks, int maxTasks, int64_t& serverTime,
              SessionEntry* sessions = nullptr,
-             int maxSessions = 0, int* sessionCount = nullptr);
+             int maxSessions = 0, int* sessionCount = nullptr,
+             char* outErr = nullptr, size_t errSize = 0);
 
     // Pushes a single category; updates cat.server_id on success.
     bool pushCategory(const char* token, Category& cat,
@@ -37,7 +38,8 @@ namespace Api {
                   char* outErr = nullptr, size_t errSize = 0,
                   int64_t deletedAt = 0);
 
-    // Pushes a completed session. Returns true on success.
+    // Pushes a session; endedAt 0 pushes it as still running (the other
+    // clients then show it). Returns true on success.
     bool pushSession(const char* token,
                      const char* sessionId,
                      const char* taskClientId,

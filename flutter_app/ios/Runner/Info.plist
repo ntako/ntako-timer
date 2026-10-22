@@ -6,8 +6,28 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Timer commands: ntako://timer/start?task=…, pause, resume, stop.
+	     Opened by the Siri intents (AppDelegate.swift), handled by app_links. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.ntako.ntakoTimer.timer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ntako</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Links go to app_links, not to Flutter's router. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Il microfono serve per i comandi vocali del timer, come "avvia Arundo" o "pausa".</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Il riconoscimento vocale trasforma i comandi pronunciati in azioni del timer.</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ntako Timer</string>
+	<string>Workadoro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

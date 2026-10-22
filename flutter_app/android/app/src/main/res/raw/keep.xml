@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources referenced only by name at runtime (the notification icon is
+     @mipmap/ic_launcher): the release build must not shrink them away. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@mipmap/ic_launcher,@drawable/*" />

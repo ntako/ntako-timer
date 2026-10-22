@@ -5,6 +5,7 @@ import '../../core/database/app_database.dart';
 import '../auth/auth_notifier.dart';
 import '../categories/categories_notifier.dart';
 import '../sync/sync_service.dart';
+import '../voice/timer_commands.dart';
 import 'tasks_notifier.dart';
 
 // ── Duration format helper ────────────────────────────────────────────────────
@@ -325,6 +326,8 @@ class _TaskCard extends ConsumerWidget {
                       Text(
                         task.description!,
                         style: Theme.of(context).textTheme.bodySmall,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     if (category != null || totalSec > 0)
                       Padding(
@@ -563,6 +566,41 @@ class _TaskDialogState extends State<_TaskDialog> {
     super.dispose();
   }
 
+  /// Two tasks with the same name in the same category can't be told apart
+  /// (by voice, in the timer's list): ask before creating one.
+  Future<bool> _confirmIfDuplicate(String title) async {
+    final name = normalize(title);
+    final tasks = widget.ref.read(activeTasksProvider).value ?? [];
+    final twin = tasks.any(
+      (t) =>
+          t.id != widget.task?.id &&
+          t.categoryId == _selectedCategoryId &&
+          normalize(t.title) == name,
+    );
+    if (!twin) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Task già esistente'),
+            content: Text(
+              'In questa categoria c\'è già un task «$title». '
+              'Con due task uguali i comandi vocali non sapranno quale scegliere.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Annulla'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(_isEdit ? 'Salva comunque' : 'Crea comunque'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cats = widget.ref.watch(activeCategoriesProvider).value ?? [];
@@ -593,7 +631,9 @@ class _TaskDialogState extends State<_TaskDialog> {
                 labelText: 'Descrizione',
                 border: OutlineInputBorder(),
               ),
-              maxLines: 2,
+              // Grows for long notes (e.g. imported commit logs), then scrolls.
+              minLines: 2,
+              maxLines: 8,
             ),
             const SizedBox(height: 16),
 
@@ -638,12 +678,14 @@ class _TaskDialogState extends State<_TaskDialog> {
           child: const Text('Annulla'),
         ),
         FilledButton(
-          onPressed: () {
+          onPressed: () async {
             final title = _titleCtrl.text.trim();
             if (title.isEmpty) return;
             final desc = _descCtrl.text.trim().isNotEmpty
                 ? _descCtrl.text.trim()
                 : null;
+            if (!await _confirmIfDuplicate(title)) return;
+            if (!context.mounted) return;
             if (_isEdit) {
               widget.ref.read(tasksNotifierProvider.notifier).saveTaskEdit(
                 id: widget.task!.id,
