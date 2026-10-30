@@ -29,7 +29,7 @@ $adminPass  = configuredSecret('ADMIN_PASS');
 $loginError = '';
 
 if ($adminPass === null) {
-    unset($_SESSION['ntako_admin']);
+    unset($_SESSION['workadoro_admin']);
     $loginError = 'Pannello disabilitato: imposta ADMIN_PASS in config/local.php.';
 }
 
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($adminPass !== null && isset($_POST['password'])) {
         if (hash_equals($adminPass, (string) $_POST['password'])) {
-            $_SESSION['ntako_admin'] = true;
+            $_SESSION['workadoro_admin'] = true;
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
             exit;
         }
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Login form ────────────────────────────────────────────────────────────────
-if (empty($_SESSION['ntako_admin'])) {
+if (empty($_SESSION['workadoro_admin'])) {
     http_response_code($adminPass === null ? 503 : 401);
     ?>
 <!DOCTYPE html>
@@ -59,7 +59,7 @@ if (empty($_SESSION['ntako_admin'])) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NTAKO Admin — Accesso</title>
+<title>Workadoro Admin — Accesso</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
   body { font-family: system-ui, sans-serif; background: #f1f3f5; display: flex;
@@ -80,7 +80,7 @@ if (empty($_SESSION['ntako_admin'])) {
 </head>
 <body>
 <div class="card">
-  <h1>NTAKO Timer</h1>
+  <h1>Workadoro</h1>
   <p class="sub">Pannello di amministrazione</p>
   <form method="post">
     <label for="pw">Password admin</label>
@@ -190,7 +190,7 @@ if ($userId > 0) {
     // Downloads: same formats as the app's backup / CSV export.
     $export = (string) ($_GET['export'] ?? '');
     if ($export === 'json' || $export === 'csv') {
-        $fileName = sprintf('ntako_utente%d_%s.%s', $userId, date('Ymd_Hi'), $export);
+        $fileName = sprintf('workadoro_utente%d_%s.%s', $userId, date('Ymd_Hi'), $export);
         header('Content-Disposition: attachment; filename="' . $fileName . '"');
         if ($export === 'json') {
             header('Content-Type: application/json; charset=utf-8');
@@ -341,7 +341,7 @@ if ($userId > 0) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NTAKO Admin — <?= htmlspecialchars((string) $user['email']) ?></title>
+<title>Workadoro Admin — <?= htmlspecialchars((string) $user['email']) ?></title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
   body { font-family: system-ui, sans-serif; background: #f1f3f5; color: #222; }
@@ -704,11 +704,11 @@ if ($userId > 0) {
     document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     document.getElementById('view-chart').classList.toggle('active', view === 'chart');
     document.getElementById('view-list').classList.toggle('active', view === 'list');
-    try { localStorage.setItem('ntako-admin-view', view); } catch (e) {}
+    try { localStorage.setItem('workadoro-admin-view', view); } catch (e) {}
   };
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
   let saved = null;
-  try { saved = localStorage.getItem('ntako-admin-view'); } catch (e) {}
+  try { saved = localStorage.getItem('workadoro-admin-view'); } catch (e) {}
   if (saved === 'list') show('list');
 
   const data = JSON.parse(document.getElementById('report-data').textContent);
@@ -861,7 +861,7 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NTAKO Admin</title>
+<title>Workadoro Admin</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
   body { font-family: system-ui, sans-serif; background: #f1f3f5; color: #222; }
@@ -908,7 +908,7 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
 <body>
 
 <header>
-  <h1>NTAKO Timer &mdash; Admin</h1>
+  <h1>Workadoro &mdash; Admin</h1>
   <div style="display:flex;align-items:center;gap:1.2rem">
     <span class="meta"><?= date('d/m/Y H:i') ?></span>
     <form class="logout" method="post">

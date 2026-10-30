@@ -18,16 +18,16 @@ import UIKit
 
 // MARK: - Siri and Shortcuts
 //
-// Each intent opens the app and an ntako://timer/… link in it; the Dart side
+// Each intent opens the app and an workadoro://timer/… link in it; the Dart side
 // (app_links → TimerCommandHandler) runs the command, exactly as for the
 // Android launcher shortcuts and Google Assistant. The phrases are Italian:
 // the project's development region is "it".
 
-/// Opens ntako://timer/<action>[?task=…] in this app.
+/// Opens workadoro://timer/<action>[?task=…] in this app.
 @MainActor
 private func openTimerLink(_ action: String, task: String? = nil) async {
   var components = URLComponents()
-  components.scheme = "ntako"
+  components.scheme = "workadoro"
   components.host = "timer"
   components.path = "/\(action)"
   if let task, !task.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -37,7 +37,7 @@ private func openTimerLink(_ action: String, task: String? = nil) async {
   _ = await UIApplication.shared.open(url)
 }
 
-/// "Avvia Ntako Timer": starts on the task selected in the app.
+/// "Avvia Workadoro": starts on the task selected in the app.
 struct StartTimerIntent: AppIntent {
   static var title: LocalizedStringResource = "Avvia il timer"
   static var description = IntentDescription("Avvia il timer sul task selezionato nell'app.")
@@ -50,7 +50,7 @@ struct StartTimerIntent: AppIntent {
   }
 }
 
-/// "Avvia un task su Ntako Timer": Siri asks which task.
+/// "Avvia un task su Workadoro": Siri asks which task.
 struct StartTaskIntent: AppIntent {
   static var title: LocalizedStringResource = "Avvia il timer su un task"
   static var description = IntentDescription("Avvia il timer sul task indicato per nome.")
@@ -102,7 +102,7 @@ struct StopTimerIntent: AppIntent {
 
 /// Phrases available to Siri as soon as the app is installed, no setup.
 /// Every phrase must contain the app name.
-struct NtakoTimerShortcuts: AppShortcutsProvider {
+struct WorkadoroShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(
       intent: StartTimerIntent(),

@@ -54,8 +54,8 @@ class BackupSection extends ConsumerWidget {
       final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       final path = await FilePicker.saveFile(
         fileName: csv
-            ? 'ntako_sessioni_$stamp.csv'
-            : 'ntako_backup_$stamp.json',
+            ? 'workadoro_sessioni_$stamp.csv'
+            : 'workadoro_backup_$stamp.json',
         bytes: utf8.encode(content),
       );
       // On the web the browser downloads the file and no path comes back.

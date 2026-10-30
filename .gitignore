@@ -23,7 +23,7 @@ flutter_app/.pub-cache/
 
 # ── Arduino / ESP32 (cardputer_client) ───────────────────────────────────────
 # Compiled firmware and object files produced by Arduino IDE / arduino-cli
-cardputer_client/NtakoTimer/build/
+cardputer_client/Workadoro/build/
 cardputer_client/**/*.elf
 cardputer_client/**/*.bin
 cardputer_client/**/*.hex

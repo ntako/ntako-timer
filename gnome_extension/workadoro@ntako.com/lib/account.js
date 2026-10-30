@@ -30,7 +30,7 @@ export async function logout(settings) {
     try {
         await clearToken(settings.get_string('server-url'));
     } catch (e) {
-        logError(e, 'ntako-timer: clearing the token failed');
+        logError(e, 'workadoro: clearing the token failed');
     }
     settings.set_string('account-email', '');
 }

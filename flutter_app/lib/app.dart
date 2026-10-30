@@ -17,13 +17,13 @@ import 'core/messenger.dart';
 import 'features/voice/assistant_open.dart';
 import 'features/voice/timer_command_handler.dart';
 
-class NtakoTimerApp extends ConsumerWidget {
-  const NtakoTimerApp({super.key});
+class WorkadoroApp extends ConsumerWidget {
+  const WorkadoroApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'NTAKO Timer',
+      title: 'Workadoro',
       scaffoldMessengerKey: rootMessengerKey,
       // The UI is Italian: date pickers and formatted dates follow it.
       locale: const Locale('it'),

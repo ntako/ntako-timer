@@ -1,4 +1,4 @@
--- NTAKO_TIMER — Migration script for existing databases
+-- Workadoro — Migration script for existing databases
 -- Run this on databases created with the original schema.sql
 -- Safe to run multiple times (uses IF NOT EXISTS / IF EXISTS guards).
 

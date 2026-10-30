@@ -77,7 +77,7 @@ class ApiClient {
     return url;
   }
 
-  /// Checks that [baseUrl] answers like an NTAKO backend: an unauthenticated
+  /// Checks that [baseUrl] answers like a Workadoro backend: an unauthenticated
   /// pull must come back as 401 with a JSON error. Returns null when it does,
   /// otherwise a message for the user.
   static Future<String?> checkServer(String baseUrl) async {
@@ -97,10 +97,10 @@ class ApiClient {
         return null;
       }
       if (resp.statusCode == 404) {
-        return 'Nessun backend NTAKO a questo indirizzo (HTTP 404). '
+        return 'Nessun backend Workadoro a questo indirizzo (HTTP 404). '
             'Controlla il percorso: di solito finisce con /api.';
       }
-      return 'Il server risponde, ma non come un backend NTAKO '
+      return 'Il server risponde, ma non come un backend Workadoro '
           '(HTTP ${resp.statusCode}).';
     } on DioException catch (e) {
       return 'Server non raggiungibile: ${e.error ?? e.message ?? e.type.name}';

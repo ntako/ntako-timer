@@ -25,7 +25,23 @@ static fs::FS& cfg() {
 }
 
 // ─── Config file helpers ───────────────────────────────────────────────────────
-#define CONFIG_FILE "/ntako_tracker.json"
+#define CONFIG_FILE  "/workadoro.json"
+#define CATS_FILE    "/workadoro_cats.bin"
+#define TASKS_FILE   "/workadoro_tasks.bin"
+#define SESSION_FILE "/workadoro_sessions.bin"
+
+// Files written before the rename to Workadoro (NTAKO Timer): renamed once,
+// on the first start, so the device keeps its login, Wi-Fi and data.
+static void migrateOldFiles() {
+    static const char* const renames[][2] = {
+        {"/ntako_tracker.json",  CONFIG_FILE},
+        {"/ntako_cats.bin",      CATS_FILE},
+        {"/ntako_tasks.bin",     TASKS_FILE},
+        {"/ntako_sessions.bin",  SESSION_FILE},
+    };
+    for (const auto& r : renames)
+        if (!cfg().exists(r[1]) && cfg().exists(r[0])) cfg().rename(r[0], r[1]);
+}
 
 static void loadConfigDoc(JsonDocument& doc) {
     File f = cfg().open(CONFIG_FILE, "r");
@@ -52,6 +68,7 @@ void Storage::init() {
         // true = format on first use if not already formatted
         LittleFS.begin(true);   // mount once, stays mounted
     }
+    migrateOldFiles();
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -173,7 +190,6 @@ void Storage::addOrUpdateNetwork(const char* ssid, const char* pass) {
 
 // ─── Category persistence (SD/LittleFS binary file) ──────────────────────────
 // File format: int32_t count  +  count × sizeof(Category).
-#define CATS_FILE  "/ntako_cats.bin"
 
 int Storage::loadCategories(Category* cats, int maxCount) {
     File f = cfg().open(CATS_FILE, "r");
@@ -201,7 +217,6 @@ void Storage::saveCategories(const Category* cats, int count) {
 // ─── Task persistence (SD/LittleFS binary file) ───────────────────────────────
 // File format: int32_t count  +  count × sizeof(Task).
 // No NVS blob limit: MAX_TASKS can grow freely.
-#define TASKS_FILE "/ntako_tasks.bin"
 
 int Storage::loadTasks(Task* tasks, int maxCount) {
     File f = cfg().open(TASKS_FILE, "r");
@@ -228,7 +243,6 @@ void Storage::saveTasks(const Task* tasks, int count) {
 
 // ─── Session log persistence (SD/LittleFS binary file) ───────────────────────
 // File format: int32_t count  +  count × sizeof(SessionEntry).
-#define SESSION_FILE "/ntako_sessions.bin"
 
 int Storage::loadSessionLog(SessionEntry* log, int maxCount) {
     File f = cfg().open(SESSION_FILE, "r");

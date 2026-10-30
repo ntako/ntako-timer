@@ -8,5 +8,5 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('it');
   await NotificationService.initialize();
-  runApp(const ProviderScope(child: NtakoTimerApp()));
+  runApp(const ProviderScope(child: WorkadoroApp()));
 }

@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ntako_timer/core/database/app_database.dart';
-import 'package:ntako_timer/core/network/api_client.dart';
-import 'package:ntako_timer/features/sync/sync_service.dart';
+import 'package:workadoro/core/database/app_database.dart';
+import 'package:workadoro/core/network/api_client.dart';
+import 'package:workadoro/features/sync/sync_service.dart';
 
 /// In-memory stand-in for the backend: acknowledges every pushed row and
 /// serves the queued pull pages in order.

@@ -1,5 +1,5 @@
 /*
- * NTAKO Timer — M5Stack Cardputer client
+ * Workadoro — M5Stack Cardputer client
  *
  * ── Arduino IDE 2.x settings ──────────────────────────────────────────────
  *  Board Manager URL : https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json

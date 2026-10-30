@@ -6,16 +6,16 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- Timer commands: ntako://timer/start?task=…, pause, resume, stop.
+	<!-- Timer commands: workadoro://timer/start?task=…, pause, resume, stop.
 	     Opened by the Siri intents (AppDelegate.swift), handled by app_links. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.ntako.ntakoTimer.timer</string>
+			<string>com.ntako.workadoro.timer</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>ntako</string>
+				<string>workadoro</string>
 			</array>
 		</dict>
 	</array>
@@ -35,7 +35,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>ntako_timer</string>
+	<string>workadoro</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

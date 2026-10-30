@@ -10,7 +10,7 @@ final voiceListenRequestedProvider = StateProvider<bool>((ref) => false);
 /// Google Assistant or Gemini opened the app, so that the user can say the
 /// command right after, without touching the phone.
 class AssistantOpen {
-  static const _channel = MethodChannel('com.ntako.ntako_timer/launch');
+  static const _channel = MethodChannel('com.ntako.workadoro/launch');
 
   /// Calls [onOpen] if the assistant opened the app, and again every time
   /// it brings the app back to the front. Android only.

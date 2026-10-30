@@ -29,7 +29,7 @@ const LIVE_SYNC_SECONDS = 30;
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
     _init(ext) {
-        super._init(0.5, 'NTAKO Timer');
+        super._init(0.5, 'Workadoro');
         this._ext = ext;
         this._settings = ext.getSettings();
         this._store = new Store();
@@ -38,7 +38,7 @@ class Indicator extends PanelMenu.Button {
 
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         this._icon = new St.Icon({icon_name: ICON, style_class: 'system-status-icon'});
-        this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER, style_class: 'ntako-timer-label'});
+        this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER, style_class: 'workadoro-label'});
         box.add_child(this._icon);
         box.add_child(this._label);
         this.add_child(box);
@@ -297,7 +297,7 @@ class Indicator extends PanelMenu.Button {
 
     _notify(title, body) {
         if (!this._source) {
-            this._source = new MessageTray.Source({title: 'NTAKO Timer', iconName: ICON});
+            this._source = new MessageTray.Source({title: 'Workadoro', iconName: ICON});
             this._source.connect('destroy', () => {
                 this._source = null;
             });
@@ -377,7 +377,7 @@ class Indicator extends PanelMenu.Button {
     }
 });
 
-export default class NtakoTimerExtension extends Extension {
+export default class WorkadoroExtension extends Extension {
     enable() {
         this._indicator = new Indicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);

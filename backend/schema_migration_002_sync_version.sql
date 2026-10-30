@@ -1,4 +1,4 @@
--- NTAKO_TIMER — Migration 002: per-user sync versions for incremental pull
+-- Workadoro — Migration 002: per-user sync versions for incremental pull
 -- Run ONCE on databases created before this change (not idempotent).
 -- Compatible with MySQL 5.7+ / MariaDB.
 

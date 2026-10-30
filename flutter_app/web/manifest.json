@@ -1,6 +1,6 @@
 {
-    "name": "ntako_timer",
-    "short_name": "ntako_timer",
+    "name": "workadoro",
+    "short_name": "workadoro",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

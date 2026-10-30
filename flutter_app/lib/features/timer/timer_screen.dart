@@ -19,7 +19,7 @@ class TimerScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NTAKO Timer'),
+        title: const Text('Workadoro'),
         centerTitle: true,
         actions: const [VoiceCommandButton()],
       ),

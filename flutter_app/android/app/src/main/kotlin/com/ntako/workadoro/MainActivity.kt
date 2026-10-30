@@ -1,4 +1,4 @@
-package com.ntako.ntako_timer
+package com.ntako.workadoro
 
 import android.content.Intent
 import android.os.Bundle
@@ -46,7 +46,7 @@ class MainActivity : FlutterActivity() {
             referrer?.host in ASSISTANTS
 
     companion object {
-        private const val CHANNEL = "com.ntako.ntako_timer/launch"
+        private const val CHANNEL = "com.ntako.workadoro/launch"
         private val ASSISTANTS = setOf(
             "com.google.android.googlequicksearchbox",
             "com.google.android.apps.bard",

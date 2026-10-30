@@ -659,7 +659,7 @@ class AccountPage {
 
     _serverGroup() {
         const g = new Adw.PreferencesGroup({title: 'Server',
-            description: 'Indirizzo dell\'API NTAKO. Cambiandolo verrai disconnesso.'});
+            description: 'Indirizzo dell\'API Workadoro. Cambiandolo verrai disconnesso.'});
         const entry = new Adw.EntryRow({title: 'Indirizzo del backend',
             text: this.settings.get_string('server-url'), show_apply_button: true});
         const status = new Adw.ActionRow({subtitle: '', visible: false});
@@ -865,7 +865,7 @@ class SettingsPage {
 
 // ── Window ───────────────────────────────────────────────────────────────────
 
-export default class NtakoTimerPreferences extends ExtensionPreferences {
+export default class WorkadoroPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         const store = new Store();

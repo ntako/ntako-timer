@@ -1,4 +1,4 @@
--- NTAKO_TIMER Database Schema
+-- Workadoro Database Schema
 -- Compatible with MySQL 5.7+ and MySQL 8.0
 -- utf8mb4 explicitly: MySQL 5.7 defaults to latin1, which rejects "→", emoji…
 

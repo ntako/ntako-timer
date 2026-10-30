@@ -68,7 +68,7 @@ function exportBackup(PDO $pdo, int $userId): array
     ], $stmt->fetchAll());
 
     return [
-        'format'      => 'ntako-timer-backup',
+        'format'      => 'workadoro-backup',
         'version'     => 1,
         'exported_at' => (int) (microtime(true) * 1000),
         'categories'  => $categories,

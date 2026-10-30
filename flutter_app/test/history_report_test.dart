@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ntako_timer/core/database/app_database.dart';
-import 'package:ntako_timer/features/backup/backup_service.dart';
-import 'package:ntako_timer/features/history/history_report.dart';
+import 'package:workadoro/core/database/app_database.dart';
+import 'package:workadoro/features/backup/backup_service.dart';
+import 'package:workadoro/features/history/history_report.dart';
 
 final now = DateTime(2026, 10, 21, 18, 30); // a Wednesday
 

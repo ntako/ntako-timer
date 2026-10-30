@@ -1,4 +1,4 @@
-name: ntako_timer
+name: workadoro
 description: "Time tracker with task management and optional cloud sync."
 publish_to: 'none'
 version: 1.0.0+1

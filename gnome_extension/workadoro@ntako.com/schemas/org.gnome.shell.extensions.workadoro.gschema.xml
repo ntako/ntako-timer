@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.ntako-timer"
-          path="/org/gnome/shell/extensions/ntako-timer/">
+  <schema id="org.gnome.shell.extensions.workadoro"
+          path="/org/gnome/shell/extensions/workadoro/">
 
     <key name="server-url" type="s">
       <default>''</default>
       <summary>Indirizzo del backend</summary>
-      <description>URL dell'API NTAKO, di solito termina con /api. Vuoto finché non lo si imposta: senza, l'estensione funziona solo in locale.</description>
+      <description>URL dell'API Workadoro, di solito termina con /api. Vuoto finché non lo si imposta: senza, l'estensione funziona solo in locale.</description>
     </key>
 
     <key name="account-email" type="s">

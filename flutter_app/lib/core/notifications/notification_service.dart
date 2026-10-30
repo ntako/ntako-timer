@@ -43,7 +43,7 @@ class NotificationService {
       body,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'ntako_timer_ongoing',
+          'workadoro_ongoing',
           'Timer in corso',
           channelDescription: 'Mostra il timer attivo nella barra di stato',
           importance: Importance.low,
@@ -76,7 +76,7 @@ class NotificationService {
       body,
       NotificationDetails(
         android: AndroidNotificationDetails(
-          sound ? 'ntako_timer_alert' : 'ntako_timer_alert_silent',
+          sound ? 'workadoro_alert' : 'workadoro_alert_silent',
           sound ? 'Allarme timer' : 'Allarme timer (silenzioso)',
           channelDescription: 'Notifiche allarme e fine pausa',
           importance: sound ? Importance.high : Importance.low,

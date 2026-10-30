@@ -1,4 +1,4 @@
-# NTAKO Timer — estensione GNOME Shell
+# Workadoro — estensione GNOME Shell
 
 Client desktop con le stesse funzioni dell'app: timer, task e categorie,
 storico con filtri e grafici, account e sincronizzazione, import/export.
@@ -7,14 +7,14 @@ GNOME Shell 46–50.
 - **Barra in alto**: tempo che scorre, menu con scelta del task, avvia /
   pausa / riprendi / ferma, totale di oggi, sincronizza.
 - **Finestra** (menu → *Task, storico e impostazioni…*, oppure
-  `gnome-extensions prefs ntako-timer@ntako.com`): pagine Task, Storico,
+  `gnome-extensions prefs workadoro@ntako.com`): pagine Task, Storico,
   Account, Impostazioni.
 
 ## Installazione
 
 ```bash
 ./install.sh            # link simbolico alla cartella del repo
-gnome-extensions enable ntako-timer@ntako.com
+gnome-extensions enable workadoro@ntako.com
 ```
 
 Su Wayland, la prima volta bisogna uscire e rientrare nella sessione prima
@@ -24,8 +24,8 @@ di poterla attivare.
 
 | Cosa | Dove |
 |---|---|
-| Dati (categorie, task, sessioni, stato del timer) | `~/.local/share/ntako-timer/data.json`, condiviso da barra e finestra |
-| Impostazioni, server, email | GSettings `org.gnome.shell.extensions.ntako-timer` |
+| Dati (categorie, task, sessioni, stato del timer) | `~/.local/share/workadoro/data.json`, condiviso da barra e finestra |
+| Impostazioni, server, email | GSettings `org.gnome.shell.extensions.workadoro` |
 | Token di accesso | portachiavi di sistema (libsecret), per server |
 
 Funziona anche senza account. Per sincronizzare: pagina Account → Server,

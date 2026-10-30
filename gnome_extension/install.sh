@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs the NTAKO Timer GNOME Shell extension for the current user.
+# Installs the Workadoro GNOME Shell extension for the current user.
 #
 #   ./install.sh          symlink (development: edits apply on next login)
 #   ./install.sh --copy   copy the files instead
@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-UUID="ntako-timer@ntako.com"
+UUID="workadoro@ntako.com"
 SRC="$(cd "$(dirname "$0")" && pwd)/$UUID"
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$UUID"
 

@@ -11,9 +11,16 @@ import GLib from 'gi://GLib';
 
 const FORMAT_VERSION = 1;
 
-/** Default location: ~/.local/share/ntako-timer/data.json */
+/** Default location: ~/.local/share/workadoro/data.json */
 export function defaultStorePath() {
-    return GLib.build_filenamev([GLib.get_user_data_dir(), 'ntako-timer', 'data.json']);
+    const path = GLib.build_filenamev([GLib.get_user_data_dir(), 'workadoro', 'data.json']);
+    // Data saved before the rename (NTAKO Timer): copied once, the old file stays.
+    const old = GLib.build_filenamev([GLib.get_user_data_dir(), 'ntako-timer', 'data.json']);
+    if (!GLib.file_test(path, GLib.FileTest.EXISTS) && GLib.file_test(old, GLib.FileTest.EXISTS)) {
+        GLib.mkdir_with_parents(GLib.path_get_dirname(path), 0o700);
+        GLib.file_set_contents(path, GLib.file_get_contents(old)[1]);
+    }
+    return path;
 }
 
 export function emptyData() {
@@ -107,7 +114,7 @@ export class Store {
             try {
                 cb();
             } catch (e) {
-                logError(e, 'ntako-timer store listener');
+                logError(e, 'workadoro store listener');
             }
         }
     }
@@ -120,7 +127,7 @@ export class Store {
             return {...base, ...data, meta: {...base.meta, ...data.meta}};
         } catch (e) {
             if (!e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
-                logError(e, 'ntako-timer: unreadable data file, starting empty');
+                logError(e, 'workadoro: unreadable data file, starting empty');
             return emptyData();
         }
     }

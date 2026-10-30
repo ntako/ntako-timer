@@ -1,7 +1,7 @@
 #pragma once
 
 // ─── NVS storage keys ────────────────────────────────────────────────────────
-#define NVS_NS        "ntako"
+#define NVS_NS        "ntako"      // kept after the rename: existing settings stay
 #define NVS_TOKEN     "jwt"
 #define NVS_EMAIL     "email"
 #define NVS_LAST_SYNC "last_sync"

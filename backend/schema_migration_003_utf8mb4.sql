@@ -1,4 +1,4 @@
--- NTAKO_TIMER — Migration 003: tables to utf8mb4
+-- Workadoro — Migration 003: tables to utf8mb4
 -- Run ONCE on databases whose tables were created with the server default
 -- charset (latin1 on MySQL 5.7). Safe to re-run: converting a table that is
 -- already utf8mb4 changes nothing.

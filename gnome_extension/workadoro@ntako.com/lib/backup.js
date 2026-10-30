@@ -2,7 +2,9 @@
 // (backup_service.dart) and the admin panel (backend/admin/export.php):
 // a file made by any of them can be imported by the others.
 
-export const FORMAT = 'ntako-timer-backup';
+export const FORMAT = 'workadoro-backup';
+/** Files exported before the project was renamed (Workadoro). */
+const LEGACY_FORMATS = ['ntako-timer-backup'];
 export const FORMAT_VERSION = 1;
 
 export class BackupFormatError extends Error {}
@@ -103,8 +105,8 @@ function parse(source) {
     } catch {
         throw new BackupFormatError('Il file non è un JSON valido.');
     }
-    if (!root || typeof root !== 'object' || root.format !== FORMAT)
-        throw new BackupFormatError('Il file non è un backup di NTAKO Timer.');
+    if (!root || typeof root !== 'object' || (root.format !== FORMAT && !LEGACY_FORMATS.includes(root.format)))
+        throw new BackupFormatError('Il file non è un backup di Workadoro.');
     if (!Number.isInteger(root.version) || root.version > FORMAT_VERSION)
         throw new BackupFormatError("Backup creato da una versione più recente: aggiorna l'estensione.");
 
@@ -210,9 +212,9 @@ export function importJson(data, source) {
 export const changedAnything = r =>
     Object.values(r).some(c => c.added > 0 || c.updated > 0);
 
-/** "ntako_backup_20261022_0130.json" style names. */
+/** "workadoro_backup_20261022_0130.json" style names. */
 export function exportFileName(kind) {
     const d = new Date();
     const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}_${two(d.getHours())}${two(d.getMinutes())}`;
-    return kind === 'csv' ? `ntako_sessioni_${stamp}.csv` : `ntako_backup_${stamp}.json`;
+    return kind === 'csv' ? `workadoro_sessioni_${stamp}.csv` : `workadoro_backup_${stamp}.json`;
 }

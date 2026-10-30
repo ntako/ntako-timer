@@ -1,4 +1,4 @@
-# NTAKO Timer
+# Workadoro
 
 App Time Tracker cross-platform (web + Android + iOS) con task list integrata e sincronizzazione cloud opzionale.
 
@@ -11,7 +11,7 @@ App Time Tracker cross-platform (web + Android + iOS) con task list integrata e 
 ## Struttura del progetto
 
 ```
-NTAKO_TIMER/
+workadoro/
 ├── docker-compose.yml       ← ambiente di sviluppo locale
 ├── .env.example             ← template variabili d'ambiente
 ├── backend/                 ← API PHP
@@ -48,9 +48,9 @@ Modifica `.env` con le credenziali desiderate. `JWT_SECRET` e `ADMIN_PASS` sono 
 
 ```
 MYSQL_ROOT_PASSWORD=rootpass
-MYSQL_DATABASE=ntako_timer
-MYSQL_USER=ntako_user
-MYSQL_PASSWORD=ntako_pass
+MYSQL_DATABASE=workadoro
+MYSQL_USER=workadoro_user
+MYSQL_PASSWORD=workadoro_pass
 JWT_SECRET=<output di openssl rand -hex 32>
 ADMIN_PASS=<password del pannello admin>
 ```

@@ -4,8 +4,8 @@ import '../../core/database/app_database.dart';
 /// shortcuts, Siri, Google Assistant (App Actions) and the in-app
 /// microphone all end up here.
 ///
-/// Links: `ntako://timer/start[?task=<name>]`, `ntako://timer/pause`,
-/// `ntako://timer/resume`, `ntako://timer/stop`.
+/// Links: `workadoro://timer/start[?task=<name>]`, `workadoro://timer/pause`,
+/// `workadoro://timer/resume`, `workadoro://timer/stop`.
 
 enum TimerCommandAction { start, pause, resume, stop }
 
@@ -17,9 +17,9 @@ class TimerCommand {
 
   const TimerCommand(this.action, {this.task});
 
-  static const scheme = 'ntako';
+  static const scheme = 'workadoro';
 
-  /// `ntako://timer/<action>[?task=…]`; null for anything else.
+  /// `workadoro://timer/<action>[?task=…]`; null for anything else.
   static TimerCommand? fromUri(Uri uri) {
     if (uri.scheme != scheme || uri.host != 'timer') return null;
     final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();

@@ -1,4 +1,4 @@
-// HTTP client for the NTAKO backend (same API as the app and the Cardputer).
+// HTTP client for the backend Workadoro (same API as the app and the Cardputer).
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 // ── Token in the system keyring ──────────────────────────────────────────────
 
-const SECRET_SCHEMA = new Secret.Schema('com.ntako.Timer', Secret.SchemaFlags.NONE,
+const SECRET_SCHEMA = new Secret.Schema('com.ntako.Workadoro', Secret.SchemaFlags.NONE,
     {server: Secret.SchemaAttributeType.STRING});
 
 /** Token for `server`, null when not logged in. */
@@ -30,14 +30,14 @@ export async function loadToken(server) {
     try {
         return await Secret.password_lookup(SECRET_SCHEMA, {server}, null);
     } catch (e) {
-        logError(e, 'ntako-timer: keyring lookup failed');
+        logError(e, 'workadoro: keyring lookup failed');
         return null;
     }
 }
 
 export function saveToken(server, token) {
     return Secret.password_store(SECRET_SCHEMA, {server}, Secret.COLLECTION_DEFAULT,
-        'NTAKO Timer', token, null);
+        'Workadoro', token, null);
 }
 
 export function clearToken(server) {
@@ -63,7 +63,7 @@ export class ApiClient {
     constructor(baseUrl, token) {
         this._baseUrl = baseUrl;
         this._token = token;
-        this._session = new Soup.Session({timeout: 15, user_agent: 'ntako-timer-gnome'});
+        this._session = new Soup.Session({timeout: 15, user_agent: 'workadoro-gnome'});
     }
 
     get(path, params = {}) {
@@ -127,19 +127,19 @@ export class ApiClient {
     }
 
     /**
-     * Checks that `baseUrl` answers like an NTAKO backend: an unauthenticated
+     * Checks that `baseUrl` answers like an backend Workadoro: an unauthenticated
      * pull must be a 401 with a JSON error. Null when it does, else a message.
      */
     static async checkServer(baseUrl) {
         const client = new ApiClient(() => baseUrl, async () => null);
         try {
             await client.get('/sync/pull');
-            return 'Il server risponde, ma non come un backend NTAKO.';
+            return 'Il server risponde, ma non come un backend Workadoro.';
         } catch (e) {
             if (e.status === 401)
                 return null;
             if (e.status === 404) {
-                return 'Nessun backend NTAKO a questo indirizzo (HTTP 404). ' +
+                return 'Nessun backend Workadoro a questo indirizzo (HTTP 404). ' +
                     'Controlla il percorso: di solito finisce con /api.';
             }
             return e.message;

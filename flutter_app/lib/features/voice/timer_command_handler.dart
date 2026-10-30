@@ -126,7 +126,7 @@ class TimerCommandHandler {
     }
   }
 
-  /// Listens for `ntako://timer/…` links: launcher shortcuts, Siri and
+  /// Listens for `workadoro://timer/…` links: launcher shortcuts, Siri and
   /// Google Assistant all open one. The stream also delivers the link the
   /// app was launched with. Call once the timer has recovered its state.
   StreamSubscription<Uri> listenToLinks() =>

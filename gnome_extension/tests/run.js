@@ -8,13 +8,13 @@
 import GLib from 'gi://GLib';
 import System from 'system';
 
-import {Store, addCategory, addTask, editTask, emptyData} from '../ntako-timer@ntako.com/lib/store.js';
-import * as timer from '../ntako-timer@ntako.com/lib/timer.js';
-import {buildReport, periodRange, effectiveGroup, NO_CATEGORY} from '../ntako-timer@ntako.com/lib/report.js';
-import {exportJson, exportCsv, importJson, changedAnything, BackupFormatError} from '../ntako-timer@ntako.com/lib/backup.js';
-import {ApiClient, ApiError, normalizeBaseUrl} from '../ntako-timer@ntako.com/lib/api.js';
-import {SyncEngine} from '../ntako-timer@ntako.com/lib/sync.js';
-import {formatHours, formatClock} from '../ntako-timer@ntako.com/lib/format.js';
+import {Store, addCategory, addTask, editTask, emptyData} from '../workadoro@ntako.com/lib/store.js';
+import * as timer from '../workadoro@ntako.com/lib/timer.js';
+import {buildReport, periodRange, effectiveGroup, NO_CATEGORY} from '../workadoro@ntako.com/lib/report.js';
+import {exportJson, exportCsv, importJson, changedAnything, BackupFormatError} from '../workadoro@ntako.com/lib/backup.js';
+import {ApiClient, ApiError, normalizeBaseUrl} from '../workadoro@ntako.com/lib/api.js';
+import {SyncEngine} from '../workadoro@ntako.com/lib/sync.js';
+import {formatHours, formatClock} from '../workadoro@ntako.com/lib/format.js';
 
 const BACKEND = ARGV[0] ?? null;
 const HERE = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
@@ -41,7 +41,7 @@ function ok(cond, what) {
         throw new Error(what);
 }
 const tmpStore = () => {
-    const dir = GLib.dir_make_tmp('ntako-test-XXXXXX');
+    const dir = GLib.dir_make_tmp('workadoro-test-XXXXXX');
     return GLib.build_filenamev([dir, 'data.json']);
 };
 const readText = path => new TextDecoder().decode(GLib.file_get_contents(path)[1]);
@@ -139,8 +139,12 @@ await test('backup: export → import round trip, merge, validation, CSV', () =>
     d.tasks.find(x => x.id === t.id).updated_at += 1; // never the same ms as the creation
     eq(importJson(fresh, exportJson(d)).tasks.updated, 1, 'newer task wins');
 
+    const legacy = JSON.parse(exportJson(d));
+    legacy.format = 'ntako-timer-backup'; // exported before the rename
+    eq(importJson(emptyData(), JSON.stringify(legacy)).sessions.added, 1, 'old NTAKO Timer backups still import');
+
     for (const [bad, part] of [['nope', 'JSON valido'], ['{"format":"x"}', 'non è un backup'],
-        [JSON.stringify({format: 'ntako-timer-backup', version: 1, tasks: [{id: 'x'}]}), 'tasks[0].id']]) {
+        [JSON.stringify({format: 'workadoro-backup', version: 1, tasks: [{id: 'x'}]}), 'tasks[0].id']]) {
         try {
             importJson(emptyData(), bad);
             throw new Error(`accepted ${bad}`);

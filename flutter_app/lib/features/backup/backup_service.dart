@@ -45,7 +45,10 @@ class ImportResult {
 /// Rows are keyed by their client UUID and include soft-deleted ones, so a
 /// restore also carries deletions.
 class BackupService {
-  static const format = 'ntako-timer-backup';
+  static const format = 'workadoro-backup';
+
+  /// Files exported before the project was renamed (NTAKO Timer).
+  static const legacyFormats = {'ntako-timer-backup'};
   static const formatVersion = 1;
 
   final AppDatabase db;
@@ -263,9 +266,10 @@ class BackupService {
     } on FormatException {
       throw const BackupFormatException('Il file non è un JSON valido.');
     }
-    if (root is! Map<String, dynamic> || root['format'] != format) {
+    if (root is! Map<String, dynamic> ||
+        (root['format'] != format && !legacyFormats.contains(root['format']))) {
       throw const BackupFormatException(
-        'Il file non è un backup di NTAKO Timer.',
+        'Il file non è un backup di Workadoro.',
       );
     }
     final version = root['version'];

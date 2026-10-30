@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ntako_timer/core/database/app_database.dart';
-import 'package:ntako_timer/features/voice/timer_commands.dart';
+import 'package:workadoro/core/database/app_database.dart';
+import 'package:workadoro/features/voice/timer_commands.dart';
 
 Task task(String id, String title,
         {String? category, bool completed = false, bool deleted = false}) =>
@@ -22,14 +22,14 @@ String? describe(TimerCommand? c) =>
 void main() {
   test('links', () {
     TimerCommand? link(String s) => TimerCommand.fromUri(Uri.parse(s));
-    expect(describe(link('ntako://timer/start')), 'start');
-    expect(describe(link('ntako://timer/start?task=Odoo%20Amazon%20Sync')), 'start:Odoo Amazon Sync');
-    expect(describe(link('ntako://timer/start?task=%20')), 'start', reason: 'blank task = selected task');
-    expect(describe(link('ntako://timer/pause')), 'pause');
-    expect(describe(link('ntako://timer/resume')), 'resume');
-    expect(describe(link('ntako://timer/stop')), 'stop');
-    expect(link('ntako://timer/explode'), isNull);
-    expect(link('ntako://other/start'), isNull);
+    expect(describe(link('workadoro://timer/start')), 'start');
+    expect(describe(link('workadoro://timer/start?task=Odoo%20Amazon%20Sync')), 'start:Odoo Amazon Sync');
+    expect(describe(link('workadoro://timer/start?task=%20')), 'start', reason: 'blank task = selected task');
+    expect(describe(link('workadoro://timer/pause')), 'pause');
+    expect(describe(link('workadoro://timer/resume')), 'resume');
+    expect(describe(link('workadoro://timer/stop')), 'stop');
+    expect(link('workadoro://timer/explode'), isNull);
+    expect(link('workadoro://other/start'), isNull);
     expect(link('https://www.ntako.com/timer/start'), isNull);
   });
 

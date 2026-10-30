@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ntako_timer/core/database/app_database.dart';
-import 'package:ntako_timer/features/backup/backup_service.dart';
-import 'package:ntako_timer/features/timer/timer_notifier.dart';
+import 'package:workadoro/core/database/app_database.dart';
+import 'package:workadoro/features/backup/backup_service.dart';
+import 'package:workadoro/features/timer/timer_notifier.dart';
 
 const catId = '11111111-1111-4111-8111-111111111111';
 const taskId = '22222222-2222-4222-8222-222222222222';
@@ -15,7 +15,7 @@ Map<String, dynamic> backupJson({
   List<Map<String, dynamic>> tasks = const [],
   List<Map<String, dynamic>> sessions = const [],
 }) => {
-  'format': 'ntako-timer-backup',
+  'format': 'workadoro-backup',
   'version': 1,
   'exported_at': 0,
   'categories': categories,
@@ -191,6 +191,13 @@ void main() {
 
     expect((await db.tasksDao.getTaskById(taskId))!.categoryId, isNull);
     expect((await db.sessionsDao.getSessionById(sessionId))!.taskId, isNull);
+  });
+
+  test('backups from before the rename (NTAKO Timer) still import', () async {
+    final result = await import(
+      backupJson(categories: [category()])..['format'] = 'ntako-timer-backup',
+    );
+    expect(result.categories.added, 1);
   });
 
   test('an invalid file is rejected without writing anything', () async {

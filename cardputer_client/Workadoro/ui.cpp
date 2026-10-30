@@ -92,7 +92,7 @@ void UI::drawWifiConnecting(const char* ssid, int dots) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_RED);
-    canvas.drawString("NTAKO TIMER", DISP_W / 2, 40);
+    canvas.drawString("WORKADORO", DISP_W / 2, 40);
 
     char buf[64];
     snprintf(buf, sizeof(buf), "Connecting to %s", ssid);
@@ -118,11 +118,11 @@ void UI::drawTaskList(const Task* tasks, int count, int selectedIdx,
     // Header bar
     canvas.setTextColor(C_RED);
     canvas.setTextDatum(ML_DATUM);
-    canvas.drawString("NTAKO", 4, 8);
+    canvas.drawString("WORKADORO", 4, 8);
 
     if (userEmail && strlen(userEmail) > 0) {
         canvas.setTextColor(C_DGREY);
-        canvas.drawString(userEmail, 52, 8);
+        canvas.drawString(userEmail, 64, 8);
     }
 
     // Battery indicator (icon, cached 60 s)
@@ -468,7 +468,7 @@ void UI::drawLoginEmail(const char* buf, bool cursor) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_RED);
-    canvas.drawString("NTAKO TIMER  —  Login", DISP_W / 2, 15);
+    canvas.drawString("WORKADORO  —  Login", DISP_W / 2, 15);
 
     canvas.setTextColor(C_GREY);
     canvas.drawString("Email:", DISP_W / 2, 42);
@@ -490,7 +490,7 @@ void UI::drawLoginPass(const char* email, const char* passBuf, bool cursor) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_RED);
-    canvas.drawString("NTAKO TIMER  —  Login", DISP_W / 2, 15);
+    canvas.drawString("WORKADORO  —  Login", DISP_W / 2, 15);
 
     canvas.setTextColor(C_DGREY);
     canvas.drawString(email, DISP_W / 2, 30);
@@ -515,7 +515,7 @@ void UI::drawRegisterEmail(const char* buf, bool cursor) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_GREEN);
-    canvas.drawString("NTAKO TIMER  —  Register", DISP_W / 2, 15);
+    canvas.drawString("WORKADORO  —  Register", DISP_W / 2, 15);
 
     canvas.setTextColor(C_GREY);
     canvas.drawString("Email:", DISP_W / 2, 42);
@@ -537,7 +537,7 @@ void UI::drawRegisterPass(const char* email, const char* passBuf, bool cursor) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_GREEN);
-    canvas.drawString("NTAKO TIMER  —  Register", DISP_W / 2, 15);
+    canvas.drawString("WORKADORO  —  Register", DISP_W / 2, 15);
 
     canvas.setTextColor(C_DGREY);
     canvas.drawString(email, DISP_W / 2, 30);
@@ -562,7 +562,7 @@ void UI::drawWifiScanning(int dots) {
     canvas.setTextDatum(MC_DATUM);
 
     canvas.setTextColor(C_RED);
-    canvas.drawString("NTAKO TIMER", DISP_W / 2, 30);
+    canvas.drawString("WORKADORO", DISP_W / 2, 30);
 
     canvas.setTextColor(C_WHITE);
     canvas.drawString("Scanning WiFi", DISP_W / 2, 60);

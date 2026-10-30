@@ -25,8 +25,9 @@ function importBackup(PDO $pdo, int $userId, string $json): array
     if (!is_array($data)) {
         throw new BackupImportError('Il file non è un JSON valido.');
     }
-    if (($data['format'] ?? null) !== 'ntako-timer-backup') {
-        throw new BackupImportError('Il file non è un backup di NTAKO Timer.');
+    // 'ntako-timer-backup': files exported before the rename to Workadoro.
+    if (!in_array($data['format'] ?? null, ['workadoro-backup', 'ntako-timer-backup'], true)) {
+        throw new BackupImportError('Il file non è un backup di Workadoro.');
     }
     if (!is_int($data['version'] ?? null) || $data['version'] > 1) {
         throw new BackupImportError('Versione del backup non supportata.');
