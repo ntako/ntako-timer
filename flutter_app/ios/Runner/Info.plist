@@ -26,6 +26,15 @@
 	<string>Il microfono serve per i comandi vocali del timer, come "avvia Arundo" o "pausa".</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Il riconoscimento vocale trasforma i comandi pronunciati in azioni del timer.</string>
+	<!-- Presence detection: position, also with the app in the background. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>La posizione serve a riconoscere quando entri ed esci dai luoghi del rilevamento presenze.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Con l'accesso anche in background, le presenze vengono registrate pure quando l'app non è aperta.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Workadoro</string>
 	<key>CFBundleExecutable</key>

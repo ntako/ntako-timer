@@ -53,6 +53,10 @@ match (true) {
     $method === 'POST' && $route === 'auth/login'    => require __DIR__ . '/api/auth/login.php',
     $method === 'GET'  && $route === 'sync/pull'     => require __DIR__ . '/api/sync/pull.php',
     $method === 'POST' && $route === 'sync/push'     => require __DIR__ . '/api/sync/push.php',
+    $method === 'GET'  && $route === 'presence/config' => require __DIR__ . '/api/presence/config.php',
+    $method === 'POST' && $route === 'presence/places' => require __DIR__ . '/api/presence/places.php',
+    $method === 'POST' && $route === 'presence/push'   => require __DIR__ . '/api/presence/push.php',
+    $method === 'GET'  && $route === 'presence/stays'  => require __DIR__ . '/api/presence/stays.php',
     default => (function () {
         http_response_code(404);
         echo json_encode(['error' => 'Endpoint not found']);

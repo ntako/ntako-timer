@@ -2008,6 +2008,572 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $PresencesTable extends Presences
+    with TableInfo<$PresencesTable, Presence> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PresencesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+    'server_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _placeIdMeta = const VerificationMeta(
+    'placeId',
+  );
+  @override
+  late final GeneratedColumn<String> placeId = GeneratedColumn<String>(
+    'place_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _placeNameMeta = const VerificationMeta(
+    'placeName',
+  );
+  @override
+  late final GeneratedColumn<String> placeName = GeneratedColumn<String>(
+    'place_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _methodMeta = const VerificationMeta('method');
+  @override
+  late final GeneratedColumn<String> method = GeneratedColumn<String>(
+    'method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _enteredAtMeta = const VerificationMeta(
+    'enteredAt',
+  );
+  @override
+  late final GeneratedColumn<int> enteredAt = GeneratedColumn<int>(
+    'entered_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _exitedAtMeta = const VerificationMeta(
+    'exitedAt',
+  );
+  @override
+  late final GeneratedColumn<int> exitedAt = GeneratedColumn<int>(
+    'exited_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSeenAtMeta = const VerificationMeta(
+    'lastSeenAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastSeenAt = GeneratedColumn<int>(
+    'last_seen_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isSyncedMeta = const VerificationMeta(
+    'isSynced',
+  );
+  @override
+  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
+    'is_synced',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_synced" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    serverId,
+    placeId,
+    placeName,
+    method,
+    enteredAt,
+    exitedAt,
+    lastSeenAt,
+    isSynced,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'presences';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Presence> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
+    }
+    if (data.containsKey('place_id')) {
+      context.handle(
+        _placeIdMeta,
+        placeId.isAcceptableOrUnknown(data['place_id']!, _placeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_placeIdMeta);
+    }
+    if (data.containsKey('place_name')) {
+      context.handle(
+        _placeNameMeta,
+        placeName.isAcceptableOrUnknown(data['place_name']!, _placeNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_placeNameMeta);
+    }
+    if (data.containsKey('method')) {
+      context.handle(
+        _methodMeta,
+        method.isAcceptableOrUnknown(data['method']!, _methodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_methodMeta);
+    }
+    if (data.containsKey('entered_at')) {
+      context.handle(
+        _enteredAtMeta,
+        enteredAt.isAcceptableOrUnknown(data['entered_at']!, _enteredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_enteredAtMeta);
+    }
+    if (data.containsKey('exited_at')) {
+      context.handle(
+        _exitedAtMeta,
+        exitedAt.isAcceptableOrUnknown(data['exited_at']!, _exitedAtMeta),
+      );
+    }
+    if (data.containsKey('last_seen_at')) {
+      context.handle(
+        _lastSeenAtMeta,
+        lastSeenAt.isAcceptableOrUnknown(
+          data['last_seen_at']!,
+          _lastSeenAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastSeenAtMeta);
+    }
+    if (data.containsKey('is_synced')) {
+      context.handle(
+        _isSyncedMeta,
+        isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Presence map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Presence(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      ),
+      placeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}place_id'],
+      )!,
+      placeName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}place_name'],
+      )!,
+      method: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method'],
+      )!,
+      enteredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}entered_at'],
+      )!,
+      exitedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}exited_at'],
+      ),
+      lastSeenAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_seen_at'],
+      )!,
+      isSynced: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_synced'],
+      )!,
+    );
+  }
+
+  @override
+  $PresencesTable createAlias(String alias) {
+    return $PresencesTable(attachedDatabase, alias);
+  }
+}
+
+class Presence extends DataClass implements Insertable<Presence> {
+  final String id;
+  final int? serverId;
+  final String placeId;
+  final String placeName;
+  final String method;
+  final int enteredAt;
+  final int? exitedAt;
+  final int lastSeenAt;
+  final bool isSynced;
+  const Presence({
+    required this.id,
+    this.serverId,
+    required this.placeId,
+    required this.placeName,
+    required this.method,
+    required this.enteredAt,
+    this.exitedAt,
+    required this.lastSeenAt,
+    required this.isSynced,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<int>(serverId);
+    }
+    map['place_id'] = Variable<String>(placeId);
+    map['place_name'] = Variable<String>(placeName);
+    map['method'] = Variable<String>(method);
+    map['entered_at'] = Variable<int>(enteredAt);
+    if (!nullToAbsent || exitedAt != null) {
+      map['exited_at'] = Variable<int>(exitedAt);
+    }
+    map['last_seen_at'] = Variable<int>(lastSeenAt);
+    map['is_synced'] = Variable<bool>(isSynced);
+    return map;
+  }
+
+  PresencesCompanion toCompanion(bool nullToAbsent) {
+    return PresencesCompanion(
+      id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      placeId: Value(placeId),
+      placeName: Value(placeName),
+      method: Value(method),
+      enteredAt: Value(enteredAt),
+      exitedAt: exitedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exitedAt),
+      lastSeenAt: Value(lastSeenAt),
+      isSynced: Value(isSynced),
+    );
+  }
+
+  factory Presence.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Presence(
+      id: serializer.fromJson<String>(json['id']),
+      serverId: serializer.fromJson<int?>(json['serverId']),
+      placeId: serializer.fromJson<String>(json['placeId']),
+      placeName: serializer.fromJson<String>(json['placeName']),
+      method: serializer.fromJson<String>(json['method']),
+      enteredAt: serializer.fromJson<int>(json['enteredAt']),
+      exitedAt: serializer.fromJson<int?>(json['exitedAt']),
+      lastSeenAt: serializer.fromJson<int>(json['lastSeenAt']),
+      isSynced: serializer.fromJson<bool>(json['isSynced']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'serverId': serializer.toJson<int?>(serverId),
+      'placeId': serializer.toJson<String>(placeId),
+      'placeName': serializer.toJson<String>(placeName),
+      'method': serializer.toJson<String>(method),
+      'enteredAt': serializer.toJson<int>(enteredAt),
+      'exitedAt': serializer.toJson<int?>(exitedAt),
+      'lastSeenAt': serializer.toJson<int>(lastSeenAt),
+      'isSynced': serializer.toJson<bool>(isSynced),
+    };
+  }
+
+  Presence copyWith({
+    String? id,
+    Value<int?> serverId = const Value.absent(),
+    String? placeId,
+    String? placeName,
+    String? method,
+    int? enteredAt,
+    Value<int?> exitedAt = const Value.absent(),
+    int? lastSeenAt,
+    bool? isSynced,
+  }) => Presence(
+    id: id ?? this.id,
+    serverId: serverId.present ? serverId.value : this.serverId,
+    placeId: placeId ?? this.placeId,
+    placeName: placeName ?? this.placeName,
+    method: method ?? this.method,
+    enteredAt: enteredAt ?? this.enteredAt,
+    exitedAt: exitedAt.present ? exitedAt.value : this.exitedAt,
+    lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+    isSynced: isSynced ?? this.isSynced,
+  );
+  Presence copyWithCompanion(PresencesCompanion data) {
+    return Presence(
+      id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      placeId: data.placeId.present ? data.placeId.value : this.placeId,
+      placeName: data.placeName.present ? data.placeName.value : this.placeName,
+      method: data.method.present ? data.method.value : this.method,
+      enteredAt: data.enteredAt.present ? data.enteredAt.value : this.enteredAt,
+      exitedAt: data.exitedAt.present ? data.exitedAt.value : this.exitedAt,
+      lastSeenAt: data.lastSeenAt.present
+          ? data.lastSeenAt.value
+          : this.lastSeenAt,
+      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Presence(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('placeId: $placeId, ')
+          ..write('placeName: $placeName, ')
+          ..write('method: $method, ')
+          ..write('enteredAt: $enteredAt, ')
+          ..write('exitedAt: $exitedAt, ')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('isSynced: $isSynced')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    serverId,
+    placeId,
+    placeName,
+    method,
+    enteredAt,
+    exitedAt,
+    lastSeenAt,
+    isSynced,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Presence &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.placeId == this.placeId &&
+          other.placeName == this.placeName &&
+          other.method == this.method &&
+          other.enteredAt == this.enteredAt &&
+          other.exitedAt == this.exitedAt &&
+          other.lastSeenAt == this.lastSeenAt &&
+          other.isSynced == this.isSynced);
+}
+
+class PresencesCompanion extends UpdateCompanion<Presence> {
+  final Value<String> id;
+  final Value<int?> serverId;
+  final Value<String> placeId;
+  final Value<String> placeName;
+  final Value<String> method;
+  final Value<int> enteredAt;
+  final Value<int?> exitedAt;
+  final Value<int> lastSeenAt;
+  final Value<bool> isSynced;
+  final Value<int> rowid;
+  const PresencesCompanion({
+    this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.placeId = const Value.absent(),
+    this.placeName = const Value.absent(),
+    this.method = const Value.absent(),
+    this.enteredAt = const Value.absent(),
+    this.exitedAt = const Value.absent(),
+    this.lastSeenAt = const Value.absent(),
+    this.isSynced = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PresencesCompanion.insert({
+    required String id,
+    this.serverId = const Value.absent(),
+    required String placeId,
+    required String placeName,
+    required String method,
+    required int enteredAt,
+    this.exitedAt = const Value.absent(),
+    required int lastSeenAt,
+    this.isSynced = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       placeId = Value(placeId),
+       placeName = Value(placeName),
+       method = Value(method),
+       enteredAt = Value(enteredAt),
+       lastSeenAt = Value(lastSeenAt);
+  static Insertable<Presence> custom({
+    Expression<String>? id,
+    Expression<int>? serverId,
+    Expression<String>? placeId,
+    Expression<String>? placeName,
+    Expression<String>? method,
+    Expression<int>? enteredAt,
+    Expression<int>? exitedAt,
+    Expression<int>? lastSeenAt,
+    Expression<bool>? isSynced,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (placeId != null) 'place_id': placeId,
+      if (placeName != null) 'place_name': placeName,
+      if (method != null) 'method': method,
+      if (enteredAt != null) 'entered_at': enteredAt,
+      if (exitedAt != null) 'exited_at': exitedAt,
+      if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
+      if (isSynced != null) 'is_synced': isSynced,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PresencesCompanion copyWith({
+    Value<String>? id,
+    Value<int?>? serverId,
+    Value<String>? placeId,
+    Value<String>? placeName,
+    Value<String>? method,
+    Value<int>? enteredAt,
+    Value<int?>? exitedAt,
+    Value<int>? lastSeenAt,
+    Value<bool>? isSynced,
+    Value<int>? rowid,
+  }) {
+    return PresencesCompanion(
+      id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      placeId: placeId ?? this.placeId,
+      placeName: placeName ?? this.placeName,
+      method: method ?? this.method,
+      enteredAt: enteredAt ?? this.enteredAt,
+      exitedAt: exitedAt ?? this.exitedAt,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      isSynced: isSynced ?? this.isSynced,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (placeId.present) {
+      map['place_id'] = Variable<String>(placeId.value);
+    }
+    if (placeName.present) {
+      map['place_name'] = Variable<String>(placeName.value);
+    }
+    if (method.present) {
+      map['method'] = Variable<String>(method.value);
+    }
+    if (enteredAt.present) {
+      map['entered_at'] = Variable<int>(enteredAt.value);
+    }
+    if (exitedAt.present) {
+      map['exited_at'] = Variable<int>(exitedAt.value);
+    }
+    if (lastSeenAt.present) {
+      map['last_seen_at'] = Variable<int>(lastSeenAt.value);
+    }
+    if (isSynced.present) {
+      map['is_synced'] = Variable<bool>(isSynced.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PresencesCompanion(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('placeId: $placeId, ')
+          ..write('placeName: $placeName, ')
+          ..write('method: $method, ')
+          ..write('enteredAt: $enteredAt, ')
+          ..write('exitedAt: $exitedAt, ')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('isSynced: $isSynced, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2015,10 +2581,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TasksTable tasks = $TasksTable(this);
   late final $SessionsTable sessions = $SessionsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $PresencesTable presences = $PresencesTable(this);
   late final CategoriesDao categoriesDao = CategoriesDao(this as AppDatabase);
   late final TasksDao tasksDao = TasksDao(this as AppDatabase);
   late final SessionsDao sessionsDao = SessionsDao(this as AppDatabase);
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
+  late final PresencesDao presencesDao = PresencesDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2028,6 +2596,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tasks,
     sessions,
     settings,
+    presences,
   ];
 }
 
@@ -3445,6 +4014,278 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$PresencesTableCreateCompanionBuilder =
+    PresencesCompanion Function({
+      required String id,
+      Value<int?> serverId,
+      required String placeId,
+      required String placeName,
+      required String method,
+      required int enteredAt,
+      Value<int?> exitedAt,
+      required int lastSeenAt,
+      Value<bool> isSynced,
+      Value<int> rowid,
+    });
+typedef $$PresencesTableUpdateCompanionBuilder =
+    PresencesCompanion Function({
+      Value<String> id,
+      Value<int?> serverId,
+      Value<String> placeId,
+      Value<String> placeName,
+      Value<String> method,
+      Value<int> enteredAt,
+      Value<int?> exitedAt,
+      Value<int> lastSeenAt,
+      Value<bool> isSynced,
+      Value<int> rowid,
+    });
+
+class $$PresencesTableFilterComposer
+    extends Composer<_$AppDatabase, $PresencesTable> {
+  $$PresencesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get placeId => $composableBuilder(
+    column: $table.placeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get placeName => $composableBuilder(
+    column: $table.placeName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get enteredAt => $composableBuilder(
+    column: $table.enteredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get exitedAt => $composableBuilder(
+    column: $table.exitedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isSynced => $composableBuilder(
+    column: $table.isSynced,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PresencesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PresencesTable> {
+  $$PresencesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get placeId => $composableBuilder(
+    column: $table.placeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get placeName => $composableBuilder(
+    column: $table.placeName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get enteredAt => $composableBuilder(
+    column: $table.enteredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get exitedAt => $composableBuilder(
+    column: $table.exitedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isSynced => $composableBuilder(
+    column: $table.isSynced,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PresencesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PresencesTable> {
+  $$PresencesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get placeId =>
+      $composableBuilder(column: $table.placeId, builder: (column) => column);
+
+  GeneratedColumn<String> get placeName =>
+      $composableBuilder(column: $table.placeName, builder: (column) => column);
+
+  GeneratedColumn<String> get method =>
+      $composableBuilder(column: $table.method, builder: (column) => column);
+
+  GeneratedColumn<int> get enteredAt =>
+      $composableBuilder(column: $table.enteredAt, builder: (column) => column);
+
+  GeneratedColumn<int> get exitedAt =>
+      $composableBuilder(column: $table.exitedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isSynced =>
+      $composableBuilder(column: $table.isSynced, builder: (column) => column);
+}
+
+class $$PresencesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PresencesTable,
+          Presence,
+          $$PresencesTableFilterComposer,
+          $$PresencesTableOrderingComposer,
+          $$PresencesTableAnnotationComposer,
+          $$PresencesTableCreateCompanionBuilder,
+          $$PresencesTableUpdateCompanionBuilder,
+          (Presence, BaseReferences<_$AppDatabase, $PresencesTable, Presence>),
+          Presence,
+          PrefetchHooks Function()
+        > {
+  $$PresencesTableTableManager(_$AppDatabase db, $PresencesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PresencesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PresencesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PresencesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<int?> serverId = const Value.absent(),
+                Value<String> placeId = const Value.absent(),
+                Value<String> placeName = const Value.absent(),
+                Value<String> method = const Value.absent(),
+                Value<int> enteredAt = const Value.absent(),
+                Value<int?> exitedAt = const Value.absent(),
+                Value<int> lastSeenAt = const Value.absent(),
+                Value<bool> isSynced = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PresencesCompanion(
+                id: id,
+                serverId: serverId,
+                placeId: placeId,
+                placeName: placeName,
+                method: method,
+                enteredAt: enteredAt,
+                exitedAt: exitedAt,
+                lastSeenAt: lastSeenAt,
+                isSynced: isSynced,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<int?> serverId = const Value.absent(),
+                required String placeId,
+                required String placeName,
+                required String method,
+                required int enteredAt,
+                Value<int?> exitedAt = const Value.absent(),
+                required int lastSeenAt,
+                Value<bool> isSynced = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PresencesCompanion.insert(
+                id: id,
+                serverId: serverId,
+                placeId: placeId,
+                placeName: placeName,
+                method: method,
+                enteredAt: enteredAt,
+                exitedAt: exitedAt,
+                lastSeenAt: lastSeenAt,
+                isSynced: isSynced,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PresencesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PresencesTable,
+      Presence,
+      $$PresencesTableFilterComposer,
+      $$PresencesTableOrderingComposer,
+      $$PresencesTableAnnotationComposer,
+      $$PresencesTableCreateCompanionBuilder,
+      $$PresencesTableUpdateCompanionBuilder,
+      (Presence, BaseReferences<_$AppDatabase, $PresencesTable, Presence>),
+      Presence,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3457,4 +4298,6 @@ class $AppDatabaseManager {
       $$SessionsTableTableManager(_db, _db.sessions);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$PresencesTableTableManager get presences =>
+      $$PresencesTableTableManager(_db, _db.presences);
 }

@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/report.php';
+require_once __DIR__ . '/presence.php';
 
 // Dates on this page (filters, buckets, CSV) are in this timezone.
 if (!@date_default_timezone_set((string) (getenv('APP_TIMEZONE') ?: 'Europe/Rome'))) {
@@ -97,6 +98,21 @@ if (empty($_SESSION['workadoro_admin'])) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 $pdo = getDbConnection();
+
+// Presence forms, on the dashboard (platform) and on a user page (that user).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', PRESENCE_ACTIONS, true)) {
+    $scope  = isset($_GET['user']) ? (int) $_GET['user'] : 0;
+    $exists = $pdo->prepare('SELECT 1 FROM users WHERE id = ?');
+    $exists->execute([$scope]);
+    $_SESSION['flash'] = match (true) {
+        !hash_equals($csrf, (string) ($_POST['csrf'] ?? '')) =>
+            ['ok' => false, 'msg' => 'Sessione scaduta: ricarica la pagina e riprova.'],
+        $scope > 0 && $exists->fetchColumn() === false => ['ok' => false, 'msg' => 'Utente non trovato.'],
+        default => handlePresencePost($pdo, $scope > 0 ? $scope : null, $_POST),
+    };
+    header('Location: ' . $_SERVER['REQUEST_URI'] . '#presenze');
+    exit;
+}
 
 /** Format seconds → e.g. "3h 42m" or "18m" */
 $fmtTime = static function (int $s): string {
@@ -269,6 +285,17 @@ if ($userId > 0) {
         ? $fmtDay($lastDay)
         : $fmtDay($filters['from']) . ' – ' . $fmtDay($lastDay);
     $groupText = ['day' => 'giorno', 'week' => 'settimana', 'month' => 'mese'][$filters['group']];
+
+    // Two tabs, each with its own filters; the period carries over.
+    $tab     = ($_GET['tab'] ?? '') === 'presence' ? 'presence' : 'task';
+    $tabLink = static fn (string $t): string => '?' . http_build_query(array_filter([
+        'user'   => $userId,
+        'tab'    => $t === 'presence' ? 'presence' : null,
+        'period' => $_GET['period'] ?? null,
+        'from'   => ($_GET['period'] ?? '') === 'custom' ? ($_GET['from'] ?? null) : null,
+        'to'     => ($_GET['period'] ?? '') === 'custom' ? ($_GET['to'] ?? null) : null,
+        'group'  => $_GET['group'] ?? null,
+    ], static fn ($v) => $v !== null && $v !== ''));
 
     // ── render helper ────────────────────────────────────────────────────────
     $renderPeriod = function (array $data) use ($fmtTime, $fmtMs): void {
@@ -490,6 +517,7 @@ if ($userId > 0) {
   .empty { padding: 1.5rem; color: #aaa; text-align: center; font-size: .88rem;
            background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 </style>
+<?php presenceStyles(); ?>
 </head>
 <body>
 
@@ -580,6 +608,12 @@ if ($userId > 0) {
 
 <div class="wrap">
 
+  <nav class="page-tabs">
+    <a class="tab-btn <?= $tab === 'task' ? 'active' : '' ?>" href="<?= htmlspecialchars($tabLink('task')) ?>">Task</a>
+    <a class="tab-btn <?= $tab === 'presence' ? 'active' : '' ?>" href="<?= htmlspecialchars($tabLink('presence')) ?>#presenze">Presenze</a>
+  </nav>
+
+  <?php if ($tab === 'task'): ?>
   <!-- Filters: one row, scoping everything below -->
   <form class="filters" id="filters" method="get">
     <input type="hidden" name="user" value="<?= (int) $userId ?>">
@@ -679,13 +713,31 @@ if ($userId > 0) {
 
   <div id="view-list" class="tab-panel"><?php $renderPeriod($listData); ?></div>
 
+  <?php else: ?>
+  <section class="presence" id="presenze">
+    <?php renderPresenceReport($pdo, $userId, $_GET, $fmtTime); ?>
+
+    <div class="section-title">Rilevamento presenze per questo utente</div>
+    <?php renderPresenceSettings($pdo, $userId, $csrf); ?>
+
+    <div class="section-title">Luoghi dell'utente</div>
+    <?php renderPlaces($pdo, $userId, $csrf); ?>
+    <?php $platformPlaces = count(Presence::adminPlaces($pdo, null)); ?>
+    <p class="hint">L'utente rileva anche i luoghi della piattaforma (<?= $platformPlaces ?>), gestiti dalla
+      <a href="<?= htmlspecialchars(strtok($_SERVER['REQUEST_URI'], '?')) ?>#presenze">dashboard</a>.</p>
+  </section>
+  <?php endif; ?>
+
 </div><!-- .wrap -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<?php if ($tab === 'presence'): ?>
+<?php presenceReportScript(); ?>
+<?php else: ?>
 <script type="application/json" id="report-data"><?= json_encode(
     $report['chart'],
     JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
 ) ?></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 (function () {
   // Filters: a select applies at once; custom dates wait for "Applica".
@@ -821,6 +873,8 @@ if ($userId > 0) {
   });
 })();
 </script>
+<?php endif; ?>
+<?php presenceScript(); ?>
 </body>
 </html>
     <?php
@@ -845,8 +899,10 @@ $users = $pdo->query('
         (SELECT COALESCE(SUM(s.duration_seconds), 0) FROM sessions s
          WHERE s.user_id = u.id AND s.ended_at IS NOT NULL)                 AS total_seconds,
         (SELECT COUNT(*) FROM sessions s
-         WHERE s.user_id = u.id AND s.ended_at IS NULL)                     AS open_sessions
+         WHERE s.user_id = u.id AND s.ended_at IS NULL)                     AS open_sessions,
+        up.policy                                                           AS presence_policy
     FROM users u
+    LEFT JOIN user_presence up ON up.user_id = u.id
     ORDER BY u.created_at DESC
 ')->fetchAll(PDO::FETCH_ASSOC);
 
@@ -854,6 +910,7 @@ $totalUsers    = count($users);
 $totalTasks    = (int) array_sum(array_column($users, 'tasks_total'));
 $totalSessions = (int) array_sum(array_column($users, 'sessions_total'));
 $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
+$platformPresence = Presence::platformSettings($pdo);
 
 ?>
 <!DOCTYPE html>
@@ -903,7 +960,18 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
   .num { font-variant-numeric: tabular-nums; }
   .dim { color: #aaa; font-size: .78rem; }
   .reg { font-size: .78rem; color: #999; }
+  .flash { margin: 1rem 1.5rem 0; padding: .75rem 1rem; border-radius: 8px; font-size: .85rem; line-height: 1.5; }
+  .flash.ok  { background: #eafaf1; color: #1e8449; }
+  .flash.err { background: #fdecea; color: #a93226; }
+  .badge-off { background: #f5f5f5; color: #999; }
+  .badge-run { background: #eaf4fe; color: #2471a3; }
+  .presence { padding: 0 1.5rem 2rem; }
+  .section-title { font-size: .82rem; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .05em; color: #999; margin-bottom: .65rem; }
+  .empty { padding: 1.5rem; color: #aaa; text-align: center; font-size: .88rem;
+           background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.07); margin-bottom: 1rem; }
 </style>
+<?php presenceStyles(); ?>
 </head>
 <body>
 
@@ -916,6 +984,10 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
     </form>
   </div>
 </header>
+
+<?php if ($flash): ?>
+<div class="flash <?= $flash['ok'] ? 'ok' : 'err' ?>"><?= nl2br(htmlspecialchars((string) $flash['msg'])) ?></div>
+<?php endif; ?>
 
 <div class="summary">
   <div class="kpi">
@@ -951,6 +1023,7 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
       <th>Tracking</th>
       <th>Tempo totale</th>
       <th>Aperte</th>
+      <th>Presenze</th>
     </tr>
   </thead>
   <tbody>
@@ -981,6 +1054,12 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
           <span class="dim">—</span>
         <?php endif; ?>
       </td>
+      <td>
+        <?php $pp = $u['presence_policy'] ?? null; $eff = $pp ?? $platformPresence['policy']; ?>
+        <span class="badge <?= $eff === 'off' ? 'badge-off' : 'badge-run' ?>"
+              title="<?= $pp === null ? 'Come la piattaforma' : 'Impostato per questo utente' ?>"><?=
+          ['off' => 'off', 'admin' => 'admin', 'user' => 'utente'][$eff] ?><?= $pp === null ? '' : ' *' ?></span>
+      </td>
     </tr>
   <?php endforeach; ?>
   </tbody>
@@ -988,5 +1067,16 @@ $totalOpen     = (int) array_sum(array_column($users, 'open_sessions'));
 <?php endif; ?>
 </div>
 
+<section class="presence" id="presenze">
+  <div class="section-title">Rilevamento presenze — impostazioni piattaforma</div>
+  <?php renderPresenceSettings($pdo, null, $csrf); ?>
+  <p class="hint" style="margin:-.4rem 0 1rem">Valgono per ogni utente senza impostazioni proprie
+    (nella tabella, * indica un'impostazione specifica dell'utente).</p>
+
+  <div class="section-title">Luoghi della piattaforma (visibili a tutti gli utenti)</div>
+  <?php renderPlaces($pdo, null, $csrf); ?>
+</section>
+
+<?php presenceScript(); ?>
 </body>
 </html>

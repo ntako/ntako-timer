@@ -6,12 +6,13 @@ import 'daos/categories_dao.dart';
 import 'daos/tasks_dao.dart';
 import 'daos/sessions_dao.dart';
 import 'daos/settings_dao.dart';
+import 'daos/presences_dao.dart';
 
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [Categories, Tasks, Sessions, Settings],
-  daos: [CategoriesDao, TasksDao, SessionsDao, SettingsDao],
+  tables: [Categories, Tasks, Sessions, Settings, Presences],
+  daos: [CategoriesDao, TasksDao, SessionsDao, SettingsDao, PresencesDao],
 )
 class AppDatabase extends _$AppDatabase {
   /// [executor] is for tests (e.g. an in-memory database).
@@ -19,13 +20,18 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
-      // Non-distributed app: destroy and recreate on any schema change
+      if (from >= 3) {
+        // 4: presence detection. Additive: existing data is kept.
+        if (from < 4) await m.createTable(presences);
+        return;
+      }
+      // Older, pre-release schemas: destroy and recreate.
       for (final table in allTables) {
         await m.deleteTable(table.actualTableName);
       }
@@ -33,6 +39,13 @@ class AppDatabase extends _$AppDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      if (!kIsWeb) {
+        // The Android presence service opens this file too: wait for the
+        // other connection's lock instead of failing, and let it read
+        // while this one writes.
+        await customStatement('PRAGMA busy_timeout = 5000');
+        await customStatement('PRAGMA journal_mode = WAL');
+      }
     },
   );
 

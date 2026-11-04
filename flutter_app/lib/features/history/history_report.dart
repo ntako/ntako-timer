@@ -212,7 +212,7 @@ class HistoryReport {
       d.isBefore(end);
       d = DateTime(d.year, d.month, d.day + 1)
     ) {
-      final (key, label) = _bucket(d, group);
+      final (key, label) = bucketOf(d, group);
       if (!bucketIndex.containsKey(key)) {
         bucketIndex[key] = labels.length;
         labels.add(label);
@@ -240,7 +240,7 @@ class HistoryReport {
     for (final s in matching) {
       final started = DateTime.fromMillisecondsSinceEpoch(s.startedAt);
       final catKey = tasks[s.taskId]?.categoryId ?? noCategory;
-      final i = bucketIndex[_bucket(started, group).$1];
+      final i = bucketIndex[bucketOf(started, group).$1];
       catSeconds[catKey] = (catSeconds[catKey] ?? 0) + s.durationSeconds;
       final buckets = catBuckets.putIfAbsent(
         catKey,
@@ -310,24 +310,25 @@ class HistoryReport {
       activeDays: days.length,
     );
   }
+}
 
-  static (String, String) _bucket(DateTime d, HistoryGroup group) {
-    switch (group) {
-      case HistoryGroup.week:
-        final monday = DateTime(d.year, d.month, d.day - (d.weekday - 1));
-        return (
-          'w${monday.year}-${monday.month}-${monday.day}',
-          '${monday.day} ${_months[monday.month - 1]}',
-        );
-      case HistoryGroup.month:
-        return ('m${d.year}-${d.month}', '${_months[d.month - 1]} ${d.year}');
-      case HistoryGroup.day:
-      case HistoryGroup.auto:
-        return (
-          'd${d.year}-${d.month}-${d.day}',
-          '${d.day} ${_months[d.month - 1]}',
-        );
-    }
+/// Bucket of day [d]: (key, label).
+(String, String) bucketOf(DateTime d, HistoryGroup group) {
+  switch (group) {
+    case HistoryGroup.week:
+      final monday = DateTime(d.year, d.month, d.day - (d.weekday - 1));
+      return (
+        'w${monday.year}-${monday.month}-${monday.day}',
+        '${monday.day} ${_months[monday.month - 1]}',
+      );
+    case HistoryGroup.month:
+      return ('m${d.year}-${d.month}', '${_months[d.month - 1]} ${d.year}');
+    case HistoryGroup.day:
+    case HistoryGroup.auto:
+      return (
+        'd${d.year}-${d.month}-${d.day}',
+        '${d.day} ${_months[d.month - 1]}',
+      );
   }
 }
 

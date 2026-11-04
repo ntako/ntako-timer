@@ -5,6 +5,21 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Voice commands (speech_to_text) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Presence detection: position (geolocator) and the connected Wi-Fi
+         (network_info_plus; Android treats its name as location data),
+         checked by a foreground service (flutter_foreground_task) that keeps
+         running when the app is closed. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- "Consenti sempre": lets the presence service restart after a reboot. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Asks to be left out of battery optimization, which suspends detection. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
         android:label="Workadoro"
         android:name="${applicationName}"
@@ -52,6 +67,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Presence detection service (lib/features/presence/presence_service.dart).
+             Warning: the plugin requires this exact name. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false"
+            android:exported="false" />
 
         <!-- flutter_local_notifications: required for scheduled notifications -->
         <receiver

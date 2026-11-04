@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../presence/presence_controller.dart';
 import 'remote_sessions.dart';
 import 'timer_notifier.dart';
 
@@ -16,6 +17,7 @@ class AppLifecycleObserver extends WidgetsBindingObserver {
       ref.read(timerNotifierProvider.notifier).onAppResume();
       // Catch up with timers started or stopped elsewhere meanwhile.
       syncIfLoggedIn(ref.read);
+      ref.read(presenceProvider.notifier).onResume();
     }
   }
 }

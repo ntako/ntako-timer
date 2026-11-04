@@ -66,3 +66,20 @@ class Settings extends Table {
   @override
   Set<Column> get primaryKey => {key};
 }
+
+/// Stays in a known place detected by this device (presence detection).
+class Presences extends Table {
+  TextColumn get id => text()(); // UUID
+  IntColumn get serverId => integer().nullable()();
+  TextColumn get placeId => text()(); // the place's client_id on the server
+  TextColumn get placeName => text()(); // at entry, kept if the place goes
+  TextColumn get method => text()(); // 'gps' | 'wifi' | 'gps+wifi'
+  IntColumn get enteredAt => integer()(); // Unix ms
+  IntColumn get exitedAt => integer().nullable()(); // null = still inside
+  IntColumn get lastSeenAt => integer()(); // last detection inside
+  BoolColumn get isSynced =>
+      boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

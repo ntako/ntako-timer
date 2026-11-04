@@ -7,6 +7,9 @@ import 'features/auth/login_screen.dart';
 import 'features/auth/register_screen.dart';
 import 'features/categories/categories_screen.dart';
 import 'features/history/history_screen.dart';
+import 'features/presence/presence_controller.dart';
+import 'features/presence/presence_report_screen.dart';
+import 'features/presence/presence_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/tasks/tasks_screen.dart';
 import 'features/timer/app_lifecycle_observer.dart';
@@ -76,6 +79,14 @@ class WorkadoroApp extends ConsumerWidget {
         builder: (ctx, st) => const CategoriesScreen(),
       ),
       GoRoute(
+        path: '/presence',
+        builder: (ctx, st) => const PresenceScreen(),
+      ),
+      GoRoute(
+        path: '/presence/report',
+        builder: (ctx, st) => const PresenceReportScreen(),
+      ),
+      GoRoute(
         path: '/login',
         builder: (ctx, st) => const LoginScreen(),
       ),
@@ -110,6 +121,8 @@ class _MainShellState extends ConsumerState<_MainShell>
   void initState() {
     super.initState();
     _lifecycleObserver = AppLifecycleObserver(ref);
+    // Starts presence detection if it was on (it keeps running from here).
+    ref.read(presenceProvider);
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(timerNotifierProvider.notifier).recoverDanglingSession();

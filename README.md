@@ -125,8 +125,50 @@ dart run build_runner build --delete-conflicting-outputs
 | POST   | `/api/auth/login`     | Accedi e ottieni un JWT            |
 | GET    | `/api/sync/pull`      | Scarica modifiche dal server (`?cursor=N&limit=200` incrementale e paginato; `?since=0` istantanea completa, usata dal Cardputer) |
 | POST   | `/api/sync/push`      | Carica modifiche locali sul server |
+| GET    | `/api/presence/config` | Impostazioni presenze dell'utente (policy, modalità) e luoghi da rilevare |
+| POST   | `/api/presence/places` | Crea/modifica/elimina luoghi dell'utente (solo con policy `user`, altrimenti 403) |
+| POST   | `/api/presence/push`   | Invia le permanenze rilevate dal dispositivo |
+| GET    | `/api/presence/stays`  | Permanenze di tutti i dispositivi dell'utente (`?from=&to=` in ms), per il report nell'app |
 
 Il token JWT va incluso come `Authorization: Bearer <token>` nelle richieste `/sync/*`.
+
+---
+
+## Rilevamento presenze (badge)
+
+I client possono comportarsi come un badge: riconoscono quando il dispositivo è in un luogo noto, tramite GPS e/o rete Wi-Fi, e registrano entrata, uscita e permanenza.
+
+**Policy** — impostata dall'admin per la piattaforma (dashboard del pannello) e, se serve, sovrascritta per il singolo utente (pagina utente):
+
+| Policy  | Modalità di rilevamento | Luoghi |
+|---------|-------------------------|--------|
+| `off`   | — (funzione disattivata) | — |
+| `admin` | decisa dall'admin | gestiti solo dall'admin |
+| `user`  | scelta su ogni dispositivo (quella dell'admin è il suggerimento) | l'utente crea i propri dall'app |
+
+**Modalità**: solo GPS, solo Wi-Fi, GPS **e** Wi-Fi (entrambi devono confermare), GPS **o** Wi-Fi (basta uno). In "e"/"o" contano i criteri che il luogo definisce: un luogo con sola posizione è rilevato dal solo GPS.
+
+**Luoghi**: della piattaforma (visibili a tutti, gestiti dalla dashboard) o del singolo utente. Ognuno ha posizione + raggio (che deve comprendere lo scarto del GPS) e/o reti Wi-Fi: un nome (SSID, vale ogni access point) o l'indirizzo di un access point (BSSID).
+
+**Regole di rilevamento** (`flutter_app/lib/features/presence/presence_logic.dart`):
+- GPS "dentro" se la posizione è entro il raggio con una precisione sufficiente; "fuori" solo se nemmeno l'errore stimato raggiunge il raggio; altrimenti non decide.
+- Wi-Fi: confronta la rete a cui il dispositivo è connesso.
+- Frequenza dei controlli scelta su ogni dispositivo: ogni 1, 2, 5 o 10 minuti (meno controlli, meno batteria).
+- Entrata alla prima conferma; uscita confermata dopo almeno due controlli negativi (minimo 3 minuti), registrata all'ultimo rilevamento positivo. Senza informazioni per 30 minuti (o app chiusa) la permanenza si chiude all'ultimo rilevamento.
+
+**App**: Impostazioni → Presenze. Il rilevamento va acceso su ogni dispositivo (servono i permessi di posizione: Android e iOS considerano dato di posizione anche il nome della rete Wi-Fi).
+
+Su Android il rilevamento è un servizio in background a sé (`flutter_foreground_task`, tipo "location", con notifica che indica dove sei): continua anche chiudendo l'app dal multitasking e riparte dopo un aggiornamento dell'app. Per non essere sospeso serve escluderlo dall'ottimizzazione batteria, e per ripartire dopo un riavvio del telefono la posizione deve essere su "Consenti sempre": la schermata Presenze lo segnala con un pulsante. La sezione **Diagnostica** elenca avvii, pause ("Nessun controllo per…"), entrate e uscite del dispositivo. Sul web la rete Wi-Fi non è leggibile (solo GPS, a pagina aperta). Su iOS, per leggere la rete Wi-Fi serve anche la capability *Access WiFi Information* nel profilo di firma.
+
+**Report**, come per i task, con filtri periodo / luogo / raggruppamento e vista Grafici o Elenco:
+- pannello admin: pagina utente → scheda **Presenze**;
+- app: Impostazioni → Presenze → **Report presenze** (dati di tutti i dispositivi dal server, più quelli di questo dispositivo non ancora inviati).
+
+Grafici: ore per giorno/settimana/mese impilate per luogo, ore per luogo, orari tipici (entrata e uscita medie, media al giorno), fasce orarie giorno per giorno (periodi fino a 31 giorni). Elenco: riepilogo per giorno (prima entrata, ultima uscita, permanenza) e tutte le permanenze registrate, con dispositivo e metodo di rilevamento.
+
+Le permanenze di più dispositivi nello stesso luogo sono unite (il tempo non è contato due volte) e una permanenza a cavallo della mezzanotte è divisa tra i due giorni. Ogni luogo ha un colore fisso (palette di 8 colori, in ordine di creazione; dal nono in poi grigio).
+
+Non ancora supportato dall'estensione GNOME e dal Cardputer.
 
 ---
 
@@ -139,7 +181,7 @@ Il token JWT va incluso come `Authorization: Bearer <token>` nelle richieste `/s
 2. **Crea il database** — dal pannello di controllo dell'hosting (es. cPanel) crea un database MySQL e un utente.
 
 3. **Importa lo schema** — importa `backend/schema.sql` tramite phpMyAdmin.
-   Se il database esiste già, esegui invece (una sola volta) le migrazioni non ancora applicate, ad es. `backend/schema_migration_002_sync_version.sql`.
+   Se il database esiste già, esegui invece (una sola volta) le migrazioni non ancora applicate, ad es. `backend/schema_migration_002_sync_version.sql`. Per il rilevamento presenze: `backend/schema_migration_004_presence.sql`.
 
 4. **Configura le credenziali** — copia `config/local.php.example` in `config/local.php` sul server e compila database, `JWT_SECRET` e `ADMIN_PASS` (genera i secret con `openssl rand -hex 32`). Senza `JWT_SECRET` l'API risponde 500; senza `ADMIN_PASS` il pannello admin è disabilitato.
 
